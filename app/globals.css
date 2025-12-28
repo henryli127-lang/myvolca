@@ -1,9 +1,16 @@
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
-  @apply bg-gradient-to-br from-purple-100 via-pink-100 to-blue-100 min-h-screen;
+  font-family: 'Quicksand', sans-serif;
+}
+
+body {
+  @apply bg-gradient-to-br from-candy-blue/10 via-candy-green/10 to-candy-orange/10 min-h-screen;
+  font-family: 'Quicksand', sans-serif;
 }
 
 .perspective-1000 {
@@ -20,5 +27,10 @@ body {
 
 .rotate-y-180 {
   transform: rotateY(180deg);
+}
+
+/* 确保卡片翻转时背面正确显示 */
+[style*="rotateY"] {
+  transform-style: preserve-3d;
 }
 

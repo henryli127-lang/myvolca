@@ -6,7 +6,16 @@ module.exports = {
     './app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        'quicksand': ['Quicksand', 'sans-serif'],
+      },
+      colors: {
+        'candy-orange': '#FF9F43',
+        'candy-green': '#2ECC71',
+        'candy-blue': '#54A0FF',
+      },
+    },
   },
   plugins: [],
 }
