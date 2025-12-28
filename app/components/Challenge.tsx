@@ -12,6 +12,29 @@ interface Word {
   keywords?: string[]
 }
 
+interface TestResults {
+  translationCorrect: number
+  translationTotal: number
+  spellingCorrect: number
+  spellingTotal: number
+  translationErrors: number
+  spellingErrors: number
+}
+
+interface WordResult {
+  translationError: boolean
+  spellingError: boolean
+}
+
+interface SavedProgress {
+  testWords: Word[]
+  currentIndex: number
+  testPhase: TestPhase
+  results: TestResults
+  wordResults: Array<{ id: number; translationError: boolean; spellingError: boolean }>
+  timestamp: number
+}
+
 interface ChallengeProps {
   user: User
   onComplete: (results: {
@@ -39,13 +62,13 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
   const TEST_PROGRESS_KEY = `test_progress_${user.id}`
   
   // 从 localStorage 恢复测试进度
-  const loadTestProgress = () => {
+  const loadTestProgress = (): SavedProgress | null => {
     if (typeof window === 'undefined') return null
     
     try {
       const saved = localStorage.getItem(TEST_PROGRESS_KEY)
       if (saved) {
-        const parsed = JSON.parse(saved)
+        const parsed = JSON.parse(saved) as SavedProgress
         // 检查进度是否过期（超过24小时）
         if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
           return parsed
@@ -65,8 +88,8 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
     words: Word[],
     index: number,
     phase: TestPhase,
-    testResults: typeof results,
-    wordResultsMap: Map<number, { translationError: boolean; spellingError: boolean }>
+    testResults: TestResults,
+    wordResultsMap: Map<number, WordResult>
   ) => {
     if (typeof window === 'undefined') return
     
@@ -106,7 +129,7 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
   const [userInput, setUserInput] = useState('')
   const [showAnswer, setShowAnswer] = useState(false)
   const [isCorrect, setIsCorrect] = useState(false)
-  const [results, setResults] = useState(savedProgress?.results || {
+  const [results, setResults] = useState<TestResults>(savedProgress?.results || {
     translationCorrect: 0,
     translationTotal: 0,
     spellingCorrect: 0,
@@ -114,9 +137,9 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
     translationErrors: 0,
     spellingErrors: 0,
   })
-  const [wordResults, setWordResults] = useState<Map<number, { translationError: boolean; spellingError: boolean }>>(
+  const [wordResults, setWordResults] = useState<Map<number, WordResult>>(
     savedProgress?.wordResults 
-      ? new Map(savedProgress.wordResults.map((item: any) => [item.id, { translationError: item.translationError, spellingError: item.spellingError }]))
+      ? new Map(savedProgress.wordResults.map((item) => [item.id, { translationError: item.translationError, spellingError: item.spellingError }]))
       : new Map()
   )
   const [spellingHint, setSpellingHint] = useState('')
@@ -168,7 +191,7 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
       }
 
       setTestWords(wordsList)
-      setResults(prev => ({
+      setResults((prev: TestResults) => ({
         ...prev,
         translationTotal: wordsList.length,
         spellingTotal: wordsList.length,
@@ -209,10 +232,10 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
     setShowAnswer(true)
 
     const wordId = testWords[currentIndex].id
-    let newWordResults: Map<number, { translationError: boolean; spellingError: boolean }>
-    let newResults = results
+    let newWordResults: Map<number, WordResult>
+    let newResults: TestResults = results
     
-    setWordResults(prev => {
+    setWordResults((prev: Map<number, WordResult>) => {
       newWordResults = new Map(prev)
       const existing = newWordResults.get(wordId) || { translationError: false, spellingError: false }
       newWordResults.set(wordId, { ...existing, translationError: !correct })
@@ -248,13 +271,13 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
     
     if (correct) {
       setIsCorrect(true)
-      setWordResults(prev => {
+      setWordResults((prev: Map<number, WordResult>) => {
         const newMap = new Map(prev)
         const existing = newMap.get(wordId) || { translationError: false, spellingError: false }
         newMap.set(wordId, { ...existing, spellingError: false })
         return newMap
       })
-      setResults(prev => ({
+      setResults((prev: TestResults) => ({
         ...prev,
         spellingCorrect: prev.spellingCorrect + 1,
       }))
@@ -268,13 +291,13 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
       setIsCorrect(false)
       setShowAnswer(true)
       setMustTypeCorrect(true)
-      setWordResults(prev => {
+      setWordResults((prev: Map<number, WordResult>) => {
         const newMap = new Map(prev)
         const existing = newMap.get(wordId) || { translationError: false, spellingError: false }
         newMap.set(wordId, { ...existing, spellingError: true })
         return newMap
       })
-      setResults(prev => ({
+      setResults((prev: TestResults) => ({
         ...prev,
         spellingErrors: prev.spellingErrors + 1,
       }))
@@ -292,7 +315,7 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
   // 下一题
   const nextQuestion = () => {
     if (currentIndex < testWords.length - 1) {
-      setCurrentIndex(prev => prev + 1)
+      setCurrentIndex((prev: number) => prev + 1)
       setUserInput('')
       setShowAnswer(false)
       setIsCorrect(false)
@@ -335,10 +358,10 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
         // 学生已经正确拼写，更新结果并继续
         setMustTypeCorrect(false)
         setIsCorrect(true)
-        let newWordResults: Map<number, { translationError: boolean; spellingError: boolean }>
-        let newResults = results
+        let newWordResults: Map<number, WordResult>
+        let newResults: TestResults = results
         
-        setWordResults(prev => {
+        setWordResults((prev: Map<number, WordResult>) => {
           newWordResults = new Map(prev)
           const existing = newWordResults.get(currentWord.id) || { translationError: false, spellingError: false }
           newWordResults.set(currentWord.id, { ...existing, spellingError: false })
@@ -420,7 +443,17 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
     )
   }
 
-  const currentWord = testWords[currentIndex]
+  const currentWord: Word | undefined = testWords[currentIndex]
+
+  if (!currentWord) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20">
+        <div className="text-center">
+          <p className="text-gray-600">加载中...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20 p-6 font-quicksand">

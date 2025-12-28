@@ -368,7 +368,10 @@ export default function ParentDashboard() {
                     />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip 
-                      formatter={(value: number) => [`${value} 个单词`, '掌握数量']}
+                      formatter={(value: number | undefined) => {
+                        if (value === undefined) return ['0 个单词', '掌握数量']
+                        return [`${value} 个单词`, '掌握数量']
+                      }}
                       labelFormatter={(label) => {
                         const dayMap: { [key: string]: string } = {
                           'Monday': '周一',

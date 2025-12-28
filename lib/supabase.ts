@@ -113,7 +113,7 @@ export const profiles = {
 
   // 更新用户角色（仅在注册时使用，role 为 NULL 时才能设置，之后禁止修改）
   // force: 如果为 true，允许在注册阶段强制更新 role（用于处理触发器已设置默认值的情况）
-  updateRole: async (userId: string, newRole: 'child' | 'parent', force: boolean = false) => {
+  updateRole: async (userId: string, newRole: 'child' | 'parent', force: boolean = false): Promise<{ data: any; error: any }> => {
     // 先检查当前 role 和 profile 是否存在
     const { data: currentProfile, error: getError } = await profiles.get(userId)
     
