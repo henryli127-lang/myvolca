@@ -311,6 +311,8 @@ const loadProgress = () => {
     onLogout()
   }
 
+  
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20 p-6 font-quicksand">
       {/* 退出按钮 */}
