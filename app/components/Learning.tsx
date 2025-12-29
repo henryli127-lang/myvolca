@@ -306,7 +306,7 @@ const loadProgress = () => {
   const handleLogoutWithSave = () => {
     // 确保当前进度已保存（如果用户在学习过程中退出）
     if (learnedCount > 0 && learnedWordIdsRef.current.size > 0) {
-      saveProgress(learnedCount, Array.from(learnedWordIdsRef.current))
+        saveProgress(learnedCount, learnedWordsRef.current)
     }
     onLogout()
   }
