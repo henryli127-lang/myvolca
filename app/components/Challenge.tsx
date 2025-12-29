@@ -286,43 +286,38 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
     if (!testWords[currentIndex]) return
 
     const correct = checkTranslation(userInput, testWords[currentIndex])
-    setIsCorrect(correct)
-    setShowAnswer(true) // 关键：设置为显示，且保持显示
-
     const wordId = testWords[currentIndex].id
-    let newResults: TestResults = results
     
-    // 更新 wordResults 状态
-    let updatedWordResults: Map<number, WordResult>
-    setWordResults((prev: Map<number, WordResult>) => {
-      updatedWordResults = new Map(prev)
-      const existing = updatedWordResults.get(wordId) || { translationError: false, spellingError: false }
-      updatedWordResults.set(wordId, { ...existing, translationError: !correct })
-      return updatedWordResults
-    })
-
+    // 1. 先计算出新的状态值（同步计算，不依赖 setState 的副作用）
+    const newWordResults = new Map(wordResults)
+    const existing = newWordResults.get(wordId) || { translationError: false, spellingError: false }
+    newWordResults.set(wordId, { ...existing, translationError: !correct })
+    
+    let newResults = { ...results }
     if (correct) {
-      newResults = {
-        ...results,
-        translationCorrect: results.translationCorrect + 1,
-      }
-      setResults(newResults)
+      newResults.translationCorrect += 1
     } else {
-      newResults = {
-        ...results,
-        translationErrors: results.translationErrors + 1,
-      }
-      setResults(newResults)
+      newResults.translationErrors += 1
     }
 
+    // 2. 更新 React 状态
+    setIsCorrect(correct)
+    setShowAnswer(true) // 确保这里设为 true
+    setWordResults(newWordResults)
+    setResults(newResults)
+
+    // 3. 保存进度（现在数据是绝对安全的）
+    saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults)
+  }
+
     // 保存进度
-    setTimeout(() => {
+    //setTimeout(() => {
       // 注意：这里只保存进度，不跳转
-      saveTestProgress(testWords, currentIndex, testPhase, newResults, updatedWordResults!)
-    }, 0)
+    //  saveTestProgress(testWords, currentIndex, testPhase, newResults, updatedWordResults!)
+    //}, 0)
     
     // ❌ 检查：确保这里没有任何 setTimeout(() => nextQuestion(), ...) 的代码
-  }
+  //}
 
   // 处理拼写测试提交
   const handleSpellingSubmit = () => {
@@ -662,7 +657,7 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
                   }}
                   placeholder="请输入中文翻译..."
                   className="w-full px-6 py-4 text-xl border-4 border-candy-blue rounded-2xl focus:outline-none focus:border-candy-green transition-all"
-                  disabled={false} // 建议不要 disable，方便用户查看
+                  disabled={showAnswer} // 建议不要 disable，方便用户查看
                 />
                 {showAnswer ? (
                   <motion.div
