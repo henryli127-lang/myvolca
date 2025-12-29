@@ -668,8 +668,8 @@ useEffect(() => {
       <WordHistoryModal 
   isOpen={isHistoryOpen} 
   onClose={() => setIsHistoryOpen(false)} 
-  userId={selectedChildId} // 传入当前选中的孩子 ID
-  title={`${selectedChild?.name || '孩子'}的单词本`}
+  userId={selectedChildId|| ''} // 传入当前选中的孩子 ID
+  title={`${selectedChild?.email?.split('@')[0] || '孩子'}的单词本`} // 💡 建议：Interface里好像没有 name 字段，建议用 email 前缀
 />
     </div>
   )
