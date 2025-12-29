@@ -37,18 +37,19 @@ interface Word {
 
 interface LearningProps {
   user: User
+  targetCount: number
   onComplete: () => void
   onLogout: () => void
 }
 
-export default function Learning({ user, onComplete, onLogout }: LearningProps) {
+export default function Learning({ user, targetCount, onComplete, onLogout }: LearningProps) {
   const [word, setWord] = useState<Word | null>(null)
   const [isFlipped, setIsFlipped] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [speechSupported, setSpeechSupported] = useState(false)
   const [showTransition, setShowTransition] = useState(false)
-  const TARGET_WORDS = 20
+  const TARGET_WORDS = targetCount
   const LEARNING_PROGRESS_KEY = `learning_progress_${user.id}`
   
   // 从 localStorage 恢复学习进度
@@ -283,6 +284,15 @@ export default function Learning({ user, onComplete, onLogout }: LearningProps) 
     )
   }
 
+  // 创建一个包装的退出函数，在退出前保存进度
+  const handleLogoutWithSave = () => {
+    // 确保当前进度已保存（如果用户在学习过程中退出）
+    if (learnedCount > 0 && learnedWordIdsRef.current.size > 0) {
+      saveProgress(learnedCount, Array.from(learnedWordIdsRef.current))
+    }
+    onLogout()
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20 p-6 font-quicksand">
       {/* 退出按钮 */}
@@ -290,7 +300,7 @@ export default function Learning({ user, onComplete, onLogout }: LearningProps) 
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={onLogout}
+          onClick={handleLogoutWithSave}
           className="bg-white/80 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
         >
           <span>🚪</span>

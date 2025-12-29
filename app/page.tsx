@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { auth, profiles, studyLogs } from '@/lib/supabase'
+// 1. 修改导入部分 (约第 6 行)
+// 添加 userProgress
+import { auth, profiles, studyLogs, userProgress } from '@/lib/supabase'
 import Auth from './components/Auth'
 import Settings from './components/Settings'
 import StudentDashboard from './components/StudentDashboard'
@@ -296,57 +298,71 @@ export default function Home() {
       setAppStage('challenge')
     }, 2000)
   }
+// 2. 修改 handleChallengeComplete 函数 (约 245 行)
 
-  const handleChallengeComplete = (results: TestResults) => {
+const handleChallengeComplete = async (results: TestResults) => {
+    // 1. 【优先】立即更新 UI，让用户看到成绩单，不再等待
     try {
-      // 清除所有相关缓存（测试已完成）
-      if (typeof window !== 'undefined' && user) {
-        try {
-          // 清除测试进度
-          const testProgressKey = `test_progress_${user.id}`
-          localStorage.removeItem(testProgressKey)
-          
-          // 清除单词列表缓存（测试完成，不再需要）
-          const wordListKey = `word_list_${user.id}`
-          localStorage.removeItem(wordListKey)
-          
-          // 清除学习进度（测试完成，可以清除）
-          const learningProgressKey = `learning_progress_${user.id}`
-          localStorage.removeItem(learningProgressKey)
-          
-          console.log('测试完成，已清除所有缓存')
-        } catch (error) {
-          console.error('清除缓存失败:', error)
-        }
-      }
-      
-      // 确保 results 和 testWords 存在
       if (!results) {
         console.error('handleChallengeComplete: results 为空')
         return
       }
-      
+
+      // 确保 testWords 存在
       if (!results.testWords || !Array.isArray(results.testWords)) {
         console.error('handleChallengeComplete: testWords 无效', results.testWords)
         results.testWords = []
       }
-      
-      // 重置所有状态
+
+      // 立即设置状态并跳转
       setTestResults(results)
       setTestWords(results.testWords)
-      
-      // 生成新的 session key，确保下次重新开始时组件完全初始化
       setSessionKey(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
       
+      // 🚀 关键：立即跳转到报告页，不要等数据库
       setAppStage('report')
+
     } catch (error) {
-      console.error('handleChallengeComplete 出错:', error)
-      // 即使出错也尝试设置基本状态
-      if (results) {
-        setTestResults(results)
-        setTestWords(results.testWords || [])
-        setAppStage('report')
+      console.error('更新 UI 状态失败:', error)
+      // 即使出错，也尽量尝试跳转
+      setAppStage('report')
+    }
+
+    // 2. 【后台】清除缓存
+    if (typeof window !== 'undefined' && user) {
+      try {
+        localStorage.removeItem(`test_progress_${user.id}`)
+        localStorage.removeItem(`word_list_${user.id}`)
+        localStorage.removeItem(`learning_progress_${user.id}`)
+        console.log('缓存已清除')
+      } catch (error) {
+        console.error('清除缓存失败:', error)
       }
+    }
+
+    // 3. 【后台】异步保存数据到数据库 (Fire and Forget)
+    // 这里的执行不会阻塞上面的界面跳转
+    if (user && results.testWords) {
+      console.log('正在后台保存测试结果到数据库...')
+      
+      // 不使用 await 阻塞整个函数，或者即使使用，UI 也已经渲染完了
+      Promise.all(results.testWords.map(async (word) => {
+        const transErrorCount = word.translationError ? 1 : 0
+        const spellErrorCount = word.spellingError ? 1 : 0
+        
+        // 只有有错误时才更新，或者根据需求更新复习计数
+        if (transErrorCount > 0 || spellErrorCount > 0) {
+           await userProgress.updateTestResults(
+             word.id, 
+             transErrorCount, 
+             spellErrorCount
+           )
+        }
+      })).then(() => {
+        console.log('✅ 测试结果后台保存完成')
+      }).catch((err) => {
+        console.error('❌ 保存测试结果失败:', err)
+      })
     }
   }
 
@@ -473,6 +489,7 @@ export default function Home() {
           >
             <Learning
               user={user}
+              targetCount={userProfile?.daily_learning_goal || 20}
               onComplete={handleLearningComplete}
               onLogout={handleLogout}
             />
@@ -488,6 +505,7 @@ export default function Home() {
           >
             <Challenge
               user={user}
+              testCount={userProfile?.daily_testing_goal || 30}
               onComplete={handleChallengeComplete}
               onLogout={handleLogout}
             />

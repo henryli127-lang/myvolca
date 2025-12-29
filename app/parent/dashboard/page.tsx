@@ -58,6 +58,10 @@ export default function ParentDashboard() {
   const [loading, setLoading] = useState(true)
   const [dataLoading, setDataLoading] = useState(true)
   const [showChildDropdown, setShowChildDropdown] = useState(false)
+  const [learningGoal, setLearningGoal] = useState(20)
+  const [testingGoal, setTestingGoal] = useState(30)
+  const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
 
   // 检查认证状态
   useEffect(() => {
@@ -148,6 +152,61 @@ useEffect(() => {
     const child = children.find(c => c.id === childId)
     setSelectedChild(child || null)
     setShowChildDropdown(false)
+  }
+
+  // 加载孩子的目标值
+  useEffect(() => {
+    const loadChildGoals = async () => {
+      if (!selectedChildId) return
+      try {
+        const { data, error } = await profiles.get(selectedChildId)
+        if (!error && data) {
+          setLearningGoal(data.daily_learning_goal || 20)
+          setTestingGoal(data.daily_testing_goal || 30)
+        }
+      } catch (error) {
+        console.error('加载孩子目标失败:', error)
+      }
+    }
+    loadChildGoals()
+  }, [selectedChildId])
+
+  // 保存目标值
+  const handleSaveGoals = async () => {
+    if (!selectedChildId) return
+    
+    // 验证范围
+    if (learningGoal < 5 || learningGoal > 50) {
+      setSaveMessage('学习目标必须在 5-50 之间')
+      setTimeout(() => setSaveMessage(null), 3000)
+      return
+    }
+    if (testingGoal < 5 || testingGoal > 100) {
+      setSaveMessage('测试目标必须在 5-100 之间')
+      setTimeout(() => setSaveMessage(null), 3000)
+      return
+    }
+
+    setSaving(true)
+    setSaveMessage(null)
+    
+    try {
+      const { data, error } = await parent.updateChildGoals(selectedChildId, learningGoal, testingGoal)
+      if (error) {
+        console.error('保存目标失败:', error)
+        setSaveMessage('保存失败，请重试')
+        setTimeout(() => setSaveMessage(null), 3000)
+      } else {
+        setSaveMessage('设置已更新 ✨')
+        setTimeout(() => setSaveMessage(null), 3000)
+      }
+    } catch (error) {
+      console.error('保存目标异常:', error)
+      setSaveMessage('保存失败，请重试')
+      setTimeout(() => setSaveMessage(null), 3000)
+    } finally {
+      setSaving(false)
+    }
   }
 
   // 计算今日进度百分比
@@ -471,6 +530,112 @@ useEffect(() => {
                 <p className="text-sm text-gray-600">
                   已掌握 <span className="font-bold text-blue-600">{dashboardData?.totalMastered || 0}</span> 个单词
                 </p>
+              </div>
+            </motion.div>
+
+            {/* 模块五：学习设置 */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="bg-white/80 backdrop-blur-sm rounded-3xl p-6 shadow-sm"
+            >
+              <h2 className="text-xl font-bold text-gray-800 mb-4">学习设置</h2>
+              
+              <div className="space-y-6">
+                {/* 每日学习目标 */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    每日学习目标 (5-50)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setLearningGoal(Math.max(5, learningGoal - 1))}
+                      disabled={learningGoal <= 5}
+                      className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 font-bold text-lg hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min="5"
+                      max="50"
+                      value={learningGoal}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 5
+                        setLearningGoal(Math.max(5, Math.min(50, val)))
+                      }}
+                      className="flex-1 px-4 py-2 text-center text-xl font-bold border-2 border-blue-200 rounded-xl focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      onClick={() => setLearningGoal(Math.min(50, learningGoal + 1))}
+                      disabled={learningGoal >= 50}
+                      className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 font-bold text-lg hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* 每日测试目标 */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    每日测试目标 (5-100)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setTestingGoal(Math.max(5, testingGoal - 1))}
+                      disabled={testingGoal <= 5}
+                      className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 font-bold text-lg hover:bg-purple-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min="5"
+                      max="100"
+                      value={testingGoal}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 5
+                        setTestingGoal(Math.max(5, Math.min(100, val)))
+                      }}
+                      className="flex-1 px-4 py-2 text-center text-xl font-bold border-2 border-purple-200 rounded-xl focus:outline-none focus:border-purple-500"
+                    />
+                    <button
+                      onClick={() => setTestingGoal(Math.min(100, testingGoal + 1))}
+                      disabled={testingGoal >= 100}
+                      className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 font-bold text-lg hover:bg-purple-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* 保存按钮和消息 */}
+                <div className="space-y-2">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleSaveGoals}
+                    disabled={saving}
+                    className="w-full py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold rounded-xl shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {saving ? '保存中...' : '保存设置'}
+                  </motion.button>
+                  {saveMessage && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`text-center text-sm font-semibold py-2 rounded-lg ${
+                        saveMessage.includes('失败') 
+                          ? 'bg-red-50 text-red-600' 
+                          : 'bg-green-50 text-green-600'
+                      }`}
+                    >
+                      {saveMessage}
+                    </motion.div>
+                  )}
+                </div>
               </div>
             </motion.div>
           </div>

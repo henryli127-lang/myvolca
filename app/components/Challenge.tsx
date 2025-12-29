@@ -38,6 +38,7 @@ interface SavedProgress {
 
 interface ChallengeProps {
   user: User
+  testCount: number
   onComplete: (results: {
     translationCorrect: number
     translationTotal: number
@@ -61,7 +62,7 @@ type TestPhase = 'translation' | 'spelling' | 'complete'
 
 
 
-export default function Challenge({ user, onComplete, onLogout }: ChallengeProps) {
+export default function Challenge({ user, testCount, onComplete, onLogout }: ChallengeProps) {
   const TEST_PROGRESS_KEY = `test_progress_${user.id}`
   
   // 从 localStorage 恢复测试进度
@@ -164,6 +165,10 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
 const inputRef = useRef<HTMLInputElement>(null)
 // ✅ 新增：标记测试是否正常完成
 const isCompletedRef = useRef(false)
+// ✅ 新增：防止回车键连击的锁
+// ❌ 删除原来的: const submissionLock = useRef(false)
+// ✅ 新增: 记录最后一次提交的时间戳
+const lastSubmissionTime = useRef(0)
   // 生成拼写提示（提前定义，供 useEffect 使用）
   const generateSpellingHint = (word: string): string => {
     const length = word.length
@@ -230,7 +235,7 @@ const isCompletedRef = useRef(false)
       // 如果没有保存的列表或缓存无效，调用 RPC 获取
       if (wordsList.length === 0) {
         console.log('调用 RPC 获取新的单词列表')
-        const { data, error } = await words.getWordsForSession(user.id, 30)
+        const { data, error } = await words.getWordsForSession(user.id, testCount)
         if (error || !data || data.length === 0) {
           console.error('获取测试单词失败:', error)
           return
@@ -290,7 +295,13 @@ const isCompletedRef = useRef(false)
  // ✅ 修复版：同步计算状态，不依赖副作用
 const handleTranslationSubmit = () => {
     if (!testWords[currentIndex]) return
-  
+    // ✅ 记录提交时间
+    lastSubmissionTime.current = Date.now()
+  // ✅ 新增：上锁，防止接下来的回车键误触“下一题”
+ // submissionLock.current = true
+  //setTimeout(() => {
+  //  submissionLock.current = false
+  //}, 500) // 0.5秒冷却时间
     const correct = checkTranslation(userInput, testWords[currentIndex])
     const wordId = testWords[currentIndex].id
   
@@ -328,7 +339,8 @@ const handleTranslationSubmit = () => {
   // 处理拼写测试提交
   const handleSpellingSubmit = () => {
     if (!testWords[currentIndex]) return
-
+    // ✅ 记录提交时间 (务必加上这一行)
+    lastSubmissionTime.current = Date.now()
     const correct = userInput.trim().toLowerCase() === testWords[currentIndex].word.toLowerCase()
     const wordId = testWords[currentIndex].id
     
@@ -337,7 +349,10 @@ const handleTranslationSubmit = () => {
       setWordResults((prev: Map<number, WordResult>) => {
         const newMap = new Map(prev)
         const existing = newMap.get(wordId) || { translationError: false, spellingError: false }
-        newMap.set(wordId, { ...existing, spellingError: false })
+        //newMap.set(wordId, { ...existing, spellingError: false })
+        // ✅ 改为: 保持原有的 spellingError 状态
+        // 如果之前错了(true)，现在改对了，它依然是 true (表示这轮测试中有过错误)
+        newMap.set(wordId, { ...existing, spellingError: existing.spellingError })
         return newMap
       })
       setResults((prev: TestResults) => ({
@@ -436,42 +451,43 @@ const handleTranslationSubmit = () => {
   }
 
   // 拼写阶段：检查是否必须输入正确答案（强制纠错）
+  // 拼写阶段：检查是否必须输入正确答案（强制纠错）
   useEffect(() => {
     // 只有在需要强制纠错、已显示答案、且用户有输入时才检查
     if (testPhase === 'spelling' && mustTypeCorrect && showAnswer && !isCorrect && userInput.trim().length > 0) {
       const currentWord = testWords[currentIndex]
       if (currentWord && userInput.trim().toLowerCase() === currentWord.word.toLowerCase()) {
-        // 学生已经正确拼写，更新结果并继续
+        // 学生已经正确拼写
         setMustTypeCorrect(false)
         setIsCorrect(true)
-        let newResults: TestResults = results
         
-        // 更新 wordResults 状态并获取更新后的值
-        let updatedWordResults: Map<number, WordResult>
-        setWordResults((prev: Map<number, WordResult>) => {
-          updatedWordResults = new Map(prev)
-          const existing = updatedWordResults.get(currentWord.id) || { translationError: false, spellingError: false }
-          updatedWordResults.set(currentWord.id, { ...existing, spellingError: false })
-          return updatedWordResults
-        })
+        // ✅ 1. 先同步计算新的状态 (不依赖 setWordResults 的回调)
+        const newWordResults = new Map(wordResults)
+        const existing = newWordResults.get(currentWord.id) || { translationError: false, spellingError: false }
         
-        newResults = {
+        // 保持之前的错误记录 (spellingError: true)，不要洗白
+        newWordResults.set(currentWord.id, { ...existing, spellingError: existing.spellingError })
+        
+        const newResults = {
           ...results,
           spellingCorrect: results.spellingCorrect + 1,
-          spellingErrors: Math.max(0, results.spellingErrors - 1), // 纠正后减少错误计数
+          spellingErrors: Math.max(0, results.spellingErrors - 1),
         }
+        
+        // ✅ 2. 更新 React 状态
+        setWordResults(newWordResults)
         setResults(newResults)
         
-        // 保存进度 - 使用更新后的 wordResults
-        saveTestProgress(testWords, currentIndex, testPhase, newResults, updatedWordResults!)
+        // ✅ 3. 保存进度 (现在 newWordResults 是真实存在的对象，不会报错了)
+        saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults)
         
         setTimeout(() => {
           nextQuestion()
         }, 1500)
       }
     }
-  }, [userInput, mustTypeCorrect, showAnswer, testPhase, testWords, currentIndex, isCorrect])
-
+    // ✅ 记得把 wordResults 和 results 加入依赖数组，防止引用旧值
+  }, [userInput, mustTypeCorrect, showAnswer, testPhase, testWords, currentIndex, isCorrect, wordResults, results])
   // 更新拼写提示
   useEffect(() => {
     if (testPhase === 'spelling' && testWords[currentIndex]) {
@@ -614,12 +630,17 @@ useEffect(() => {
               {currentIndex + 1} / {testWords.length}
             </span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-4">
+          <div className="w-full bg-gray-200 rounded-full h-4 relative">
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${((currentIndex + 1) / testWords.length) * 100}%` }}
               className="bg-gradient-to-r from-candy-blue to-candy-green h-4 rounded-full"
             />
+          </div>
+          <div className="flex justify-end mt-1">
+            <span className="text-sm font-medium text-gray-600">
+              {currentIndex + 1} / {testWords.length}
+            </span>
           </div>
         </div>
 
@@ -629,6 +650,7 @@ useEffect(() => {
           initial={{ opacity: 0, x: 50 }}
           animate={showAnswer && !isCorrect && testPhase === 'translation' ? {
             x: [0, -10, 10, -10, 10, 0],
+            opacity: 1, // ✅ 关键修复：强制保持不透明
           } : {
             opacity: 1,
             x: 0,
@@ -652,6 +674,7 @@ useEffect(() => {
                 <input
                   type="text"
                   value={userInput}
+                  autoFocus
                   onChange={(e) => setUserInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -662,13 +685,19 @@ useEffect(() => {
                         handleTranslationSubmit()
                       } else {
                         // 已经显示答案了 -> 按回车直接去下一题 (这也是很好的体验)
-                        nextQuestion()
+                        // ✅ 修改：只有在没上锁的情况下，才允许去下一题
+                        // 已经显示答案了 -> 检查冷却时间
+                        const now = Date.now()
+                        // ✅ 只有距离上次提交超过 500ms，才允许去下一题
+                        if (now - lastSubmissionTime.current > 500) {
+                          nextQuestion()
+                        }
                       }
                     }
                   }}
                   placeholder="请输入中文翻译..."
                   className="w-full px-6 py-4 text-xl border-4 border-candy-blue rounded-2xl focus:outline-none focus:border-candy-green transition-all"
-                  disabled={showAnswer} // 建议不要 disable，方便用户查看
+                  disabled={showAnswer}
                 />
                 {showAnswer ? (
                   <motion.div
@@ -705,13 +734,18 @@ useEffect(() => {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault() // 防止某些浏览器的默认提交行为
-                      if (!showAnswer) {
-                        // 第一次提交
-                        handleSpellingSubmit()
-                      } else if (mustTypeCorrect && userInput.trim().toLowerCase() === currentWord.word.toLowerCase()) {
-                        // 强制纠错时，如果输入正确，自动继续（由 useEffect 处理）
-                        // 这里不需要额外操作
-                      }
+                            // ✅ 1. 检查时间锁 (防止机器级连击)
+      const now = Date.now()
+      if (now - lastSubmissionTime.current < 500) return
+
+      // ✅ 2. 核心修复：增加 !isCorrect 判断
+      // 如果已经答对(正在等待跳转)，或者已经显示答案，就不允许再提交了
+      if (!showAnswer && !isCorrect) {
+        handleSpellingSubmit()
+      } else if (mustTypeCorrect && userInput.trim().toLowerCase() === currentWord.word.toLowerCase()) {
+        // 强制纠错时的逻辑 (保持不变)
+      }
+
                     }
                   }}
                   placeholder={mustTypeCorrect && showAnswer ? '请完整拼写正确答案...' : (spellingHint || '请输入英文单词...')}

@@ -55,11 +55,11 @@ export const profiles = {
     return { exists: !!data && !error, error }
   },
 
-  // 获取用户资料（字段名严格对应数据库：id, email, role, parent_id, streak_days, last_login_at）
+  // 获取用户资料（字段名严格对应数据库：id, email, role, parent_id, streak_days, last_login_at, daily_learning_goal, daily_testing_goal）
   get: async (userId: string) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, role, parent_id, streak_days, last_login_at')
+      .select('id, email, role, parent_id, streak_days, last_login_at, daily_learning_goal, daily_testing_goal')
       .eq('id', userId)
       .single()
     return { data, error }
@@ -74,7 +74,7 @@ export const profiles = {
         last_login_at: new Date().toISOString()
       })
       .eq('id', userId)
-      .select('id, email, role, parent_id, streak_days, last_login_at')
+      .select('id, email, role, parent_id, streak_days, last_login_at, daily_learning_goal, daily_testing_goal')
       .single()
     return { data, error }
   },
@@ -624,5 +624,42 @@ export const parent = {
       .slice(0, limit) || []
 
     return { data: wordsWithErrors, error: null }
+  },
+
+  // 更新孩子的学习目标和测试目标
+  updateChildGoals: async (childId: string, learningGoal: number, testingGoal: number) => {
+    try {
+      // 先执行更新操作（不包含 select，避免 RLS 问题）
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          daily_learning_goal: learningGoal,
+          daily_testing_goal: testingGoal
+        })
+        .eq('id', childId)
+      
+      if (updateError) {
+        console.error('更新操作失败:', updateError)
+        return { data: null, error: updateError }
+      }
+
+      // 更新成功后，单独查询获取更新后的数据
+      const { data, error: selectError } = await supabase
+        .from('profiles')
+        .select('id, daily_learning_goal, daily_testing_goal')
+        .eq('id', childId)
+        .single()
+      
+      if (selectError) {
+        console.error('查询更新后的数据失败:', selectError)
+        // 即使查询失败，更新操作可能已经成功，返回成功但数据为空
+        return { data: null, error: selectError }
+      }
+      
+      return { data, error: null }
+    } catch (err: any) {
+      console.error('更新孩子目标失败:', err)
+      return { data: null, error: err }
+    }
   },
 }

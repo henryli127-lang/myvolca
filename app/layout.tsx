@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: '单词学习卡片',
+  title: 'EmiliaEdu单词记忆系统（GSL&AWL）',
   description: '有趣的单词学习应用',
 }
 
