@@ -410,7 +410,27 @@ const loadProgress = () => {
                       transition={{ delay: 0.3 }}
                       className="bg-white/30 backdrop-blur-sm rounded-2xl p-5 border-2 border-white/50 max-w-2xl"
                     >
-                      <p className="text-white font-semibold text-sm mb-2">📝 例句</p>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-white font-semibold text-sm">📝 例句</p>
+                        {speechSupported && (
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              playAudio(word.sentence_en!)
+                            }}
+                            className={`p-2 rounded-full transition-all ${
+                              isSpeaking
+                                ? 'bg-white/30 text-white animate-pulse'
+                                : 'bg-white/20 hover:bg-white/30 text-white'
+                            }`}
+                            aria-label="朗读例句"
+                          >
+                            <VolumeIcon size={20} className={isSpeaking ? 'animate-pulse' : ''} />
+                          </motion.button>
+                        )}
+                      </div>
                       <p className="text-white text-base leading-relaxed italic">
                         {word.sentence_en}
                       </p>
