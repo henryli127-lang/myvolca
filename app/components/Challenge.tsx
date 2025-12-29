@@ -337,51 +337,64 @@ const handleTranslationSubmit = () => {
   //}
 
   // 处理拼写测试提交
+  // 处理拼写测试提交 (修复版：答错立即保存，防止刷新作弊)
   const handleSpellingSubmit = () => {
     if (!testWords[currentIndex]) return
-    // ✅ 记录提交时间 (务必加上这一行)
     lastSubmissionTime.current = Date.now()
+
     const correct = userInput.trim().toLowerCase() === testWords[currentIndex].word.toLowerCase()
     const wordId = testWords[currentIndex].id
     
+    // 1. 同步计算新的 WordResults
+    const newWordResults = new Map(wordResults)
+    const existing = newWordResults.get(wordId) || { translationError: false, spellingError: false }
+    
+    // 2. 同步计算新的 Results
+    let newResults = { ...results }
+
     if (correct) {
+      // --- 答对逻辑 ---
       setIsCorrect(true)
-      setWordResults((prev: Map<number, WordResult>) => {
-        const newMap = new Map(prev)
-        const existing = newMap.get(wordId) || { translationError: false, spellingError: false }
-        //newMap.set(wordId, { ...existing, spellingError: false })
-        // ✅ 改为: 保持原有的 spellingError 状态
-        // 如果之前错了(true)，现在改对了，它依然是 true (表示这轮测试中有过错误)
-        newMap.set(wordId, { ...existing, spellingError: existing.spellingError })
-        return newMap
-      })
-      setResults((prev: TestResults) => ({
-        ...prev,
-        spellingCorrect: prev.spellingCorrect + 1,
-      }))
       setMustTypeCorrect(false)
-      // 继续下一题
+      
+      // 保持之前的错误记录 (如果之前错过，这里依然是 true)
+      newWordResults.set(wordId, { ...existing, spellingError: existing.spellingError })
+      
+      newResults.spellingCorrect = results.spellingCorrect + 1
+
+      // 更新状态
+      setWordResults(newWordResults)
+      setResults(newResults)
+      
+      // ✅ 立即保存 (答对了也要存，防止意外)
+      saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults)
+
       setTimeout(() => {
         nextQuestion()
       }, 1000)
+
     } else {
-      // 拼写错误：显示正确答案，要求重新拼写
+      // --- 答错逻辑 ---
       setIsCorrect(false)
       setShowAnswer(true)
       setMustTypeCorrect(true)
-      setWordResults((prev: Map<number, WordResult>) => {
-        const newMap = new Map(prev)
-        const existing = newMap.get(wordId) || { translationError: false, spellingError: false }
-        newMap.set(wordId, { ...existing, spellingError: true })
-        return newMap
-      })
-      setResults((prev: TestResults) => ({
-        ...prev,
-        spellingErrors: prev.spellingErrors + 1,
-      }))
-      // 清空输入框，让用户重新输入
+      
+      // 标记为拼写错误
+      newWordResults.set(wordId, { ...existing, spellingError: true })
+      
+      // 增加错误计数
+      newResults.spellingErrors = results.spellingErrors + 1
+
+      // 更新状态
+      setWordResults(newWordResults)
+      setResults(newResults)
+      
+      // ✅ 关键修复：答错的瞬间立即保存！
+      // 这样即使刷新页面，系统也记得这题“已经错过一次了”
+      saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults)
+
+      // UI 处理
       setUserInput('')
-      // 延迟聚焦，确保 DOM 更新完成
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus()
@@ -451,8 +464,8 @@ const handleTranslationSubmit = () => {
   }
 
   // 拼写阶段：检查是否必须输入正确答案（强制纠错）
-  // 拼写阶段：检查是否必须输入正确答案（强制纠错）
-  useEffect(() => {
+// 拼写阶段：检查是否必须输入正确答案（强制纠错）
+useEffect(() => {
     // 只有在需要强制纠错、已显示答案、且用户有输入时才检查
     if (testPhase === 'spelling' && mustTypeCorrect && showAnswer && !isCorrect && userInput.trim().length > 0) {
       const currentWord = testWords[currentIndex]
@@ -461,34 +474,36 @@ const handleTranslationSubmit = () => {
         setMustTypeCorrect(false)
         setIsCorrect(true)
         
-        // ✅ 1. 先同步计算新的状态 (不依赖 setWordResults 的回调)
+        // 1. 同步计算新的 WordResults 状态
         const newWordResults = new Map(wordResults)
         const existing = newWordResults.get(currentWord.id) || { translationError: false, spellingError: false }
         
         // 保持之前的错误记录 (spellingError: true)，不要洗白
         newWordResults.set(currentWord.id, { ...existing, spellingError: existing.spellingError })
         
-        const newResults = {
+        // ❌ 删除原来的分数修改逻辑
+        /* const newResults = {
           ...results,
           spellingCorrect: results.spellingCorrect + 1,
           spellingErrors: Math.max(0, results.spellingErrors - 1),
         }
+        */
         
-        // ✅ 2. 更新 React 状态
+        // ✅ 2. 只更新 WordResults，保持 results 分数不变
+        // 因为错误已经在第一次提交时（handleSpellingSubmit 的 else 分支）被记录了
         setWordResults(newWordResults)
-        setResults(newResults)
+        // setResults(newResults) // 不需要更新 results
         
-        // ✅ 3. 保存进度 (现在 newWordResults 是真实存在的对象，不会报错了)
-        saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults)
+        // ✅ 3. 保存进度 (传入当前的 results 即可)
+        saveTestProgress(testWords, currentIndex, testPhase, results, newWordResults)
         
         setTimeout(() => {
           nextQuestion()
         }, 1500)
       }
     }
-    // ✅ 记得把 wordResults 和 results 加入依赖数组，防止引用旧值
   }, [userInput, mustTypeCorrect, showAnswer, testPhase, testWords, currentIndex, isCorrect, wordResults, results])
-  // 更新拼写提示
+ // 更新拼写提示
   useEffect(() => {
     if (testPhase === 'spelling' && testWords[currentIndex]) {
       const hint = generateSpellingHint(testWords[currentIndex].word)

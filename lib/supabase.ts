@@ -663,3 +663,20 @@ export const parent = {
     }
   },
 }
+
+// 在 lib/supabase.ts 中添加
+export const reports = {
+    // 获取指定日期范围的学习历史
+    getHistory: async (userId: string, startDate: string, endDate: string) => {
+      // 确保 endDate 包含当天的最后一秒
+      const start = new Date(startDate).toISOString()
+      const end = new Date(new Date(endDate).setHours(23, 59, 59, 999)).toISOString()
+  
+      const { data, error } = await supabase.rpc('get_learning_history', {
+        p_user_id: userId,
+        p_start_date: start,
+        p_end_date: end,
+      })
+      return { data, error }
+    }
+  }

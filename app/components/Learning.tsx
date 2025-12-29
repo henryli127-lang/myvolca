@@ -53,8 +53,9 @@ export default function Learning({ user, targetCount, onComplete, onLogout }: Le
   const LEARNING_PROGRESS_KEY = `learning_progress_${user.id}`
   
   // 从 localStorage 恢复学习进度
-  const loadProgress = () => {
-    if (typeof window === 'undefined') return { count: 0, wordIds: [] }
+// 从 localStorage 恢复学习进度 (修改版：支持恢复完整单词列表)
+const loadProgress = () => {
+    if (typeof window === 'undefined') return { count: 0, wordIds: [], words: [] }
     
     try {
       const saved = localStorage.getItem(LEARNING_PROGRESS_KEY)
@@ -62,29 +63,33 @@ export default function Learning({ user, targetCount, onComplete, onLogout }: Le
         const parsed = JSON.parse(saved)
         return {
           count: parsed.count || 0,
-          wordIds: parsed.wordIds || []
+          wordIds: parsed.wordIds || [],
+          words: parsed.words || [] // ✅ 新增：恢复完整的单词对象数组
         }
       }
     } catch (error) {
       console.error('加载学习进度失败:', error)
     }
-    return { count: 0, wordIds: [] }
+    return { count: 0, wordIds: [], words: [] }
   }
 
-  // 保存学习进度到 localStorage
-  const saveProgress = (count: number, wordIds: number[]) => {
+  // 保存学习进度到 localStorage (修改版：保存完整单词列表)
+  const saveProgress = (count: number, words: Word[]) => {
     if (typeof window === 'undefined') return
     
     try {
       localStorage.setItem(LEARNING_PROGRESS_KEY, JSON.stringify({
         count,
-        wordIds,
+        wordIds: words.map(w => w.id), // 为了兼容旧逻辑，保留 ID 列表
+        words: words, // ✅ 新增：保存完整的单词对象
         timestamp: Date.now()
       }))
     } catch (error) {
       console.error('保存学习进度失败:', error)
     }
   }
+
+
 
   // 清除学习进度
   const clearProgress = () => {
@@ -99,6 +104,8 @@ export default function Learning({ user, targetCount, onComplete, onLogout }: Le
   const initialProgress = loadProgress()
   const [learnedCount, setLearnedCount] = useState(initialProgress.count)
   const learnedWordIdsRef = useRef<Set<number>>(new Set(initialProgress.wordIds))
+  // ✅ 新增：用于存储本轮已学习的所有单词完整信息
+  const learnedWordsRef = useRef<Word[]>(initialProgress.words || [])
   const speechSynthesisRef = useRef<SpeechSynthesis | null>(null)
 
   // 检查语音 API 支持
@@ -243,18 +250,29 @@ export default function Learning({ user, targetCount, onComplete, onLogout }: Le
         currentReviewCount
       )
 
-      // 标记这个单词为已学习（使用 ref 同步更新）
+      // 1. 更新状态
       learnedWordIdsRef.current.add(word.id)
+      // ✅ 新增：把当前学完的这个单词加入列表
+      learnedWordsRef.current = [...learnedWordsRef.current, word]
+      
       const newCount = learnedCount + 1
       setLearnedCount(newCount)
 
-      // 保存进度到 localStorage
-      saveProgress(newCount, Array.from(learnedWordIdsRef.current))
+      // ✅ 修改：保存进度时传入完整的单词列表
+      saveProgress(newCount, learnedWordsRef.current)
 
-      // 如果已经学习了 20 个单词，显示过渡动画并完成
+      // 2. 检查是否完成
       if (newCount >= TARGET_WORDS) {
-        // 清除学习进度（已完成）
+        // ✅ 关键修复：将刚才学完的所有单词保存到 word_list 缓存
+        // 这样 Challenge 组件启动时，就会直接读取这份名单，而不会去数据库重新瞎抓
+        localStorage.setItem(`word_list_${user.id}`, JSON.stringify({
+          words: learnedWordsRef.current, // 传递这 20 个特定的词
+          timestamp: Date.now()
+        }))
+
+        // 清除学习进度（learning_progress 可以清了，但 word_list 留给测试用）
         clearProgress()
+        
         setShowTransition(true)
         setTimeout(() => {
           onComplete()

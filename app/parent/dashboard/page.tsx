@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { Medal, Star, Crown, Trophy, Award, Target, LogOut, ChevronDown, Eye } from 'lucide-react'
 import { auth, profiles, parent, words } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
+import WordHistoryModal from '@/app/components/WordHistoryModal'
 
 interface ChildProfile {
   id: string
@@ -62,7 +63,7 @@ export default function ParentDashboard() {
   const [testingGoal, setTestingGoal] = useState(30)
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
-
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   // 检查认证状态
   useEffect(() => {
     const checkAuth = async () => {
@@ -638,9 +639,38 @@ useEffect(() => {
                 </div>
               </div>
             </motion.div>
+
+            {/* 模块六：学习历史 - 应该放在这里，作为独立的卡片，和模块五是兄弟关系 */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+              className="bg-white/80 backdrop-blur-sm rounded-3xl p-6 shadow-sm"
+            >
+              <h2 className="text-xl font-bold text-gray-800 mb-4">学习历史</h2>
+              
+              <div className="flex items-center justify-center h-full py-4">                    
+                <button 
+                  onClick={() => setIsHistoryOpen(true)}
+                  className="w-full py-4 bg-white text-candy-blue border-2 border-candy-blue rounded-xl font-bold hover:bg-candy-blue hover:text-white transition-all flex items-center justify-center gap-2 text-lg shadow-sm hover:shadow-md"
+                >
+                  📅 查看单词明细
+                </button>
+              </div>
+            </motion.div>
+
           </div>
         )}
       </div>
+
+
+
+      <WordHistoryModal 
+  isOpen={isHistoryOpen} 
+  onClose={() => setIsHistoryOpen(false)} 
+  userId={selectedChildId} // 传入当前选中的孩子 ID
+  title={`${selectedChild?.name || '孩子'}的单词本`}
+/>
     </div>
   )
 }
