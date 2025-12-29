@@ -273,7 +273,7 @@ export const words = {
       // 获取所有单词（包含 keywords 字段）
       const { data: allWords, error } = await supabase
         .from('words')
-        .select('id, word, translation, pos, mnemonic, sentence_en, keywords')
+        .select('id, word, translation, pos, mnemonic, sentence_en, sentence_cn, keywords')
 
       if (error) {
         console.error('获取单词列表失败:', error)
@@ -333,6 +333,33 @@ export const words = {
       .eq('status', 'mastered')
     
     return { count: data?.length || 0, error }
+  },
+
+  // 获取学习会话的单词（基于艾宾浩斯记忆曲线，包含错题复习、旧词巩固、新词学习）
+  getWordsForSession: async (userId: string, limit: number = 30) => {
+    try {
+      const { data, error } = await supabase.rpc('get_words_for_session', {
+        p_user_id: userId,
+        p_limit: limit
+      })
+      
+      if (error) {
+        console.error('调用 get_words_for_session RPC 失败:', error)
+        return { data: null, error }
+      }
+
+      // 确保 id 为 number 类型（int8）
+      const words = data?.map((word: any) => ({
+        ...word,
+        id: Number(word.id),
+        is_review: word.is_review || false
+      })) || []
+
+      return { data: words, error: null }
+    } catch (err: any) {
+      console.error('调用 get_words_for_session RPC 异常:', err)
+      return { data: null, error: err }
+    }
   },
 }
 

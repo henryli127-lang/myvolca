@@ -43,6 +43,7 @@ export default function Home() {
   const [appStage, setAppStage] = useState<AppStage>('dashboard')
   const [testResults, setTestResults] = useState<TestResults | null>(null)
   const [testWords, setTestWords] = useState<TestWord[]>([])
+  const [sessionKey, setSessionKey] = useState<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   const sessionStartTime = useRef<Date>(new Date())
   const sessionId = useRef<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -297,15 +298,80 @@ export default function Home() {
   }
 
   const handleChallengeComplete = (results: TestResults) => {
-    setTestResults(results)
-    setTestWords(results.testWords)
-    setAppStage('report')
+    try {
+      // 清除所有相关缓存（测试已完成）
+      if (typeof window !== 'undefined' && user) {
+        try {
+          // 清除测试进度
+          const testProgressKey = `test_progress_${user.id}`
+          localStorage.removeItem(testProgressKey)
+          
+          // 清除单词列表缓存（测试完成，不再需要）
+          const wordListKey = `word_list_${user.id}`
+          localStorage.removeItem(wordListKey)
+          
+          // 清除学习进度（测试完成，可以清除）
+          const learningProgressKey = `learning_progress_${user.id}`
+          localStorage.removeItem(learningProgressKey)
+          
+          console.log('测试完成，已清除所有缓存')
+        } catch (error) {
+          console.error('清除缓存失败:', error)
+        }
+      }
+      
+      // 确保 results 和 testWords 存在
+      if (!results) {
+        console.error('handleChallengeComplete: results 为空')
+        return
+      }
+      
+      if (!results.testWords || !Array.isArray(results.testWords)) {
+        console.error('handleChallengeComplete: testWords 无效', results.testWords)
+        results.testWords = []
+      }
+      
+      // 重置所有状态
+      setTestResults(results)
+      setTestWords(results.testWords)
+      
+      // 生成新的 session key，确保下次重新开始时组件完全初始化
+      setSessionKey(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
+      
+      setAppStage('report')
+    } catch (error) {
+      console.error('handleChallengeComplete 出错:', error)
+      // 即使出错也尝试设置基本状态
+      if (results) {
+        setTestResults(results)
+        setTestWords(results.testWords || [])
+        setAppStage('report')
+      }
+    }
   }
 
   const handleBackToDashboard = () => {
+    // 清除所有缓存和状态
+    if (typeof window !== 'undefined' && user) {
+      try {
+        const testProgressKey = `test_progress_${user.id}`
+        localStorage.removeItem(testProgressKey)
+        const wordListKey = `word_list_${user.id}`
+        localStorage.removeItem(wordListKey)
+        const learningProgressKey = `learning_progress_${user.id}`
+        localStorage.removeItem(learningProgressKey)
+      } catch (error) {
+        console.error('清除缓存失败:', error)
+      }
+    }
+    
+    // 重置所有状态
     setAppStage('dashboard')
     setTestResults(null)
     setTestWords([])
+    
+    // 生成新的 session key
+    setSessionKey(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   }
 
   // 如果未认证，显示登录/注册表单
@@ -400,7 +466,7 @@ export default function Home() {
 
         {appStage === 'learning' && (
           <motion.div
-            key="learning"
+            key={`learning-${sessionKey}`}
             initial={{ opacity: 0, x: 100 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -100 }}
@@ -415,7 +481,7 @@ export default function Home() {
 
         {appStage === 'challenge' && (
           <motion.div
-            key="challenge"
+            key={`challenge-${sessionKey}`}
             initial={{ opacity: 0, x: 100 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -100 }}

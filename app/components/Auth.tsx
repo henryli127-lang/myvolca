@@ -345,7 +345,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
           <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-indigo-600 mb-2">
             {isLogin ? '欢迎回来！' : '开始学习之旅'}
           </h1>
-          <p className="text-sky-600 text-sm">🎓 新西兰单词学习平台</p>
+          <p className="text-sky-600 text-sm">🎓 GSL&AWL单词学习平台</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -504,6 +504,10 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
           >
             {isLogin ? '还没有账号？点击注册 👉' : '已有账号？点击登录 👉'}
           </button>
+        </div>
+        <div className="text-center text-sm text-sky-600">
+          <p> </p>
+          <p>© 2025 EmiliaEdu. All rights reserved.</p>
         </div>
       </div>
     </div>

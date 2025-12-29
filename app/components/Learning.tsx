@@ -30,7 +30,9 @@ interface Word {
   pos?: string
   mnemonic?: string
   sentence_en?: string
+  sentence_cn?: string
   keywords?: string[]
+  is_review?: boolean
 }
 
 interface LearningProps {
@@ -332,7 +334,17 @@ export default function Learning({ user, onComplete, onLogout }: LearningProps) 
               >
                 {/* 正面 - 英文单词 */}
                 <div className="absolute inset-0 backface-hidden rounded-3xl bg-gradient-to-br from-candy-blue via-candy-green to-candy-orange shadow-2xl flex flex-col items-center justify-center p-8 border-4 border-white">
-                  <div className="flex items-center justify-center gap-4 mb-4">
+                  {/* Review 标签 */}
+                  {word.is_review && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="absolute top-4 right-4 bg-yellow-400 text-yellow-900 px-4 py-2 rounded-full font-bold text-sm shadow-lg"
+                    >
+                      🔄 Review
+                    </motion.div>
+                  )}
+                  <div className="flex items-center justify-center gap-4 mb-6">
                     <motion.h2
                       initial={{ scale: 0.8, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
@@ -360,10 +372,24 @@ export default function Learning({ user, onComplete, onLogout }: LearningProps) 
                       </motion.button>
                     )}
                   </div>
+                  {/* 新词显示完整例句，复习词不显示 */}
+                  {word.sentence_en && !word.is_review && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3 }}
+                      className="bg-white/30 backdrop-blur-sm rounded-2xl p-5 border-2 border-white/50 max-w-2xl"
+                    >
+                      <p className="text-white font-semibold text-sm mb-2">📝 例句</p>
+                      <p className="text-white text-base leading-relaxed italic">
+                        {word.sentence_en}
+                      </p>
+                    </motion.div>
+                  )}
                   <motion.p
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ delay: 0.4 }}
+                    transition={{ delay: 0.5 }}
                     className="text-white/90 text-lg mt-6"
                   >
                     👆 点击卡片查看详情
@@ -398,16 +424,16 @@ export default function Learning({ user, onComplete, onLogout }: LearningProps) 
                       </motion.div>
                     )}
 
-                    {word.sentence_en && (
+                    {word.sentence_cn && (
                       <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.4 }}
                         className="bg-white/30 backdrop-blur-sm rounded-2xl p-5 border-2 border-white/50"
                       >
-                        <p className="text-white font-semibold text-sm mb-2">📝 例句</p>
-                        <p className="text-white text-base leading-relaxed italic">
-                          {word.sentence_en}
+                        <p className="text-white font-semibold text-sm mb-2">📝 中文例句</p>
+                        <p className="text-white text-base leading-relaxed">
+                          {word.sentence_cn}
                         </p>
                       </motion.div>
                     )}

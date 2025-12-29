@@ -10,6 +10,7 @@ interface Word {
   word: string
   translation: string
   keywords?: string[]
+  is_review?: boolean
 }
 
 interface TestResults {
@@ -89,11 +90,17 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
     index: number,
     phase: TestPhase,
     testResults: TestResults,
-    wordResultsMap: Map<number, WordResult>
+    wordResultsMap: Map<number, WordResult> | undefined
   ) => {
     if (typeof window === 'undefined') return
     
     try {
+      // 确保 wordResultsMap 存在且是 Map 类型
+      if (!wordResultsMap || !(wordResultsMap instanceof Map)) {
+        console.warn('wordResultsMap 无效，使用空 Map')
+        wordResultsMap = new Map()
+      }
+
       const wordResultsArray = Array.from(wordResultsMap.entries()).map(([id, errors]) => ({
         id,
         ...errors
@@ -117,6 +124,10 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
     if (typeof window === 'undefined') return
     try {
       localStorage.removeItem(TEST_PROGRESS_KEY)
+      // 同时清除单词列表缓存，确保下次重新开始时获取新单词
+      const wordListKey = `word_list_${user.id}`
+      localStorage.removeItem(wordListKey)
+      console.log('已清除测试进度和单词列表缓存')
     } catch (error) {
       console.error('清除测试进度失败:', error)
     }
@@ -145,6 +156,7 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
   const [spellingHint, setSpellingHint] = useState('')
   const [mustTypeCorrect, setMustTypeCorrect] = useState(false)
   const [hasRestoredProgress, setHasRestoredProgress] = useState(!!savedProgress)
+  const [showStartMessage, setShowStartMessage] = useState(true)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // 生成拼写提示（提前定义，供 useEffect 使用）
@@ -176,19 +188,66 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
       return
     }
 
-    // 否则获取新的测试单词
+    // 否则获取测试单词（使用与学习环节相同的30个词）
     const fetchTestWords = async () => {
-      const wordsList: Word[] = []
-      const maxAttempts = 20
-      let attempts = 0
-
-      while (wordsList.length < 5 && attempts < maxAttempts) {
-        const { data } = await words.getRandomUnmastered(user.id)
-        if (data && !wordsList.find(w => w.id === data.id)) {
-          wordsList.push(data as Word)
+      // 先尝试从 localStorage 获取单词列表（与学习环节共享）
+      const savedListKey = `word_list_${user.id}`
+      let wordsList: Word[] = []
+      
+      if (typeof window !== 'undefined') {
+        try {
+          const saved = localStorage.getItem(savedListKey)
+          if (saved) {
+            const parsed = JSON.parse(saved)
+            // 检查缓存是否有效（24小时内且包含单词）
+            if (parsed.words && Array.isArray(parsed.words) && parsed.words.length > 0 && 
+                parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+              wordsList = parsed.words.map((w: any) => ({
+                ...w,
+                id: Number(w.id),
+                is_review: w.is_review || false
+              }))
+              console.log(`从缓存加载 ${wordsList.length} 个测试单词`)
+            } else {
+              // 缓存无效，清除它
+              localStorage.removeItem(savedListKey)
+              console.log('单词列表缓存无效，已清除')
+            }
+          }
+        } catch (error) {
+          console.error('加载单词列表失败:', error)
+          // 出错时清除缓存
+          localStorage.removeItem(savedListKey)
         }
-        attempts++
       }
+
+      // 如果没有保存的列表或缓存无效，调用 RPC 获取
+      if (wordsList.length === 0) {
+        console.log('调用 RPC 获取新的单词列表')
+        const { data, error } = await words.getWordsForSession(user.id, 30)
+        if (error || !data || data.length === 0) {
+          console.error('获取测试单词失败:', error)
+          return
+        }
+        wordsList = data
+        
+        // 保存到缓存
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(savedListKey, JSON.stringify({
+              words: wordsList,
+              timestamp: Date.now()
+            }))
+          } catch (error) {
+            console.error('保存单词列表失败:', error)
+          }
+        }
+      }
+
+      // 统计复习词和新词数量
+      const reviewCount = wordsList.filter(w => w.is_review).length
+      const newCount = wordsList.length - reviewCount
+      console.log(`测试开始：${reviewCount} 个复习词，${newCount} 个新词`)
 
       setTestWords(wordsList)
       setResults((prev: TestResults) => ({
@@ -232,14 +291,15 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
     setShowAnswer(true)
 
     const wordId = testWords[currentIndex].id
-    let newWordResults: Map<number, WordResult>
     let newResults: TestResults = results
     
+    // 更新 wordResults 状态并获取更新后的值
+    let updatedWordResults: Map<number, WordResult>
     setWordResults((prev: Map<number, WordResult>) => {
-      newWordResults = new Map(prev)
-      const existing = newWordResults.get(wordId) || { translationError: false, spellingError: false }
-      newWordResults.set(wordId, { ...existing, translationError: !correct })
-      return newWordResults
+      updatedWordResults = new Map(prev)
+      const existing = updatedWordResults.get(wordId) || { translationError: false, spellingError: false }
+      updatedWordResults.set(wordId, { ...existing, translationError: !correct })
+      return updatedWordResults
     })
 
     if (correct) {
@@ -256,9 +316,9 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
       setResults(newResults)
     }
 
-    // 保存进度
+    // 保存进度 - 使用更新后的 wordResults
     setTimeout(() => {
-      saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults!)
+      saveTestProgress(testWords, currentIndex, testPhase, newResults, updatedWordResults!)
     }, 0)
   }
 
@@ -314,6 +374,12 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
 
   // 下一题
   const nextQuestion = () => {
+    // 确保 testWords 存在且有效
+    if (!testWords || testWords.length === 0) {
+      console.error('testWords 为空，无法继续')
+      return
+    }
+
     if (currentIndex < testWords.length - 1) {
       setCurrentIndex((prev: number) => prev + 1)
       setUserInput('')
@@ -328,23 +394,38 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
         setUserInput('')
         setShowAnswer(false)
         setIsCorrect(false)
-        const hint = generateSpellingHint(testWords[0].word)
-        setSpellingHint(hint)
+        // 确保 testWords[0] 存在且有 word 字段
+        if (testWords[0] && testWords[0].word) {
+          const hint = generateSpellingHint(testWords[0].word)
+          setSpellingHint(hint)
+        }
       } else {
-        // 测试完成，传递单词结果
-        onComplete({
-          ...results,
-          testWords: testWords.map(w => {
-            const wordResult = wordResults.get(w.id) || { translationError: false, spellingError: false }
-            return {
-              id: w.id,
-              word: w.word,
-              translation: w.translation,
-              translationError: wordResult.translationError,
-              spellingError: wordResult.spellingError,
-            }
+        // 测试完成，清除进度并传递单词结果
+        clearTestProgress()
+        try {
+          onComplete({
+            ...results,
+            testWords: testWords
+              .filter(w => w && w.id && w.word && w.translation) // 过滤掉无效的单词
+              .map(w => {
+                const wordResult = wordResults.get(w.id) || { translationError: false, spellingError: false }
+                return {
+                  id: w.id,
+                  word: w.word,
+                  translation: w.translation,
+                  translationError: wordResult.translationError,
+                  spellingError: wordResult.spellingError,
+                }
+              })
           })
-        })
+        } catch (error) {
+          console.error('调用 onComplete 时出错:', error)
+          // 即使出错也尝试调用，但使用空数组
+          onComplete({
+            ...results,
+            testWords: []
+          })
+        }
       }
     }
   }
@@ -358,15 +439,17 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
         // 学生已经正确拼写，更新结果并继续
         setMustTypeCorrect(false)
         setIsCorrect(true)
-        let newWordResults: Map<number, WordResult>
         let newResults: TestResults = results
         
+        // 更新 wordResults 状态并获取更新后的值
+        let updatedWordResults: Map<number, WordResult>
         setWordResults((prev: Map<number, WordResult>) => {
-          newWordResults = new Map(prev)
-          const existing = newWordResults.get(currentWord.id) || { translationError: false, spellingError: false }
-          newWordResults.set(currentWord.id, { ...existing, spellingError: false })
-          return newWordResults
+          updatedWordResults = new Map(prev)
+          const existing = updatedWordResults.get(currentWord.id) || { translationError: false, spellingError: false }
+          updatedWordResults.set(currentWord.id, { ...existing, spellingError: false })
+          return updatedWordResults
         })
+        
         newResults = {
           ...results,
           spellingCorrect: results.spellingCorrect + 1,
@@ -374,8 +457,8 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
         }
         setResults(newResults)
         
-        // 保存进度
-        saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults!)
+        // 保存进度 - 使用更新后的 wordResults
+        saveTestProgress(testWords, currentIndex, testPhase, newResults, updatedWordResults!)
         
         setTimeout(() => {
           nextQuestion()
@@ -418,6 +501,16 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
     await onLogout()
   }
 
+  // 显示测试开始提示（仅在第一次显示）
+  // 注意：这个 useEffect 必须在所有早期返回之前，确保 hooks 调用顺序一致
+  useEffect(() => {
+    if (testWords.length > 0 && currentIndex === 0 && testPhase === 'translation' && showStartMessage) {
+      const timer = setTimeout(() => {
+        setShowStartMessage(false)
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [testWords.length, currentIndex, testPhase, showStartMessage])
 
   if (testWords.length === 0) {
     return (
@@ -443,6 +536,10 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
     )
   }
 
+  // 统计复习词和新词数量（用于显示提示信息）
+  const reviewCount = testWords.filter(w => w.is_review).length
+  const newCount = testWords.length - reviewCount
+
   const currentWord: Word | undefined = testWords[currentIndex]
 
   if (!currentWord) {
@@ -462,13 +559,42 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={onLogout}
+          onClick={handleLogoutWithSave}
           className="bg-white/80 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
         >
           <span>🚪</span>
           <span className="font-semibold">退出</span>
         </motion.button>
       </div>
+
+      {/* 测试开始提示 */}
+      <AnimatePresence>
+        {showStartMessage && testWords.length > 0 && currentIndex === 0 && testPhase === 'translation' && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ y: 20 }}
+              animate={{ y: 0 }}
+              exit={{ y: -20 }}
+              className="bg-white rounded-3xl p-8 shadow-2xl max-w-md text-center"
+            >
+              <h2 className="text-3xl font-bold text-gray-800 mb-4">Ready to Test! 🚀</h2>
+              <p className="text-lg text-gray-700 mb-2">
+                You have <span className="font-bold text-yellow-600">{reviewCount}</span> review words
+              </p>
+              <p className="text-lg text-gray-700 mb-4">
+                and <span className="font-bold text-blue-600">{newCount}</span> new words today.
+              </p>
+              <p className="text-xl font-semibold text-candy-green">Let's go! 🚀</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="max-w-4xl mx-auto">
         {/* 进度指示 */}
         <div className="mb-8">
