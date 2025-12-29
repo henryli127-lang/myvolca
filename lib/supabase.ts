@@ -510,7 +510,18 @@ export const parent = {
       return { data: null, error: err }
     }
   },
-
+  // [新增] 获取孩子全量看板数据 (一次性获取所有图表数据)
+  getChildDashboardStats: async (childId: string) => {
+    try {
+      const { data, error } = await supabase.rpc('get_child_dashboard_full_stats', {
+        p_child_id: childId
+      })
+      return { data, error }
+    } catch (err: any) {
+      console.error('调用 get_child_dashboard_full_stats RPC 失败:', err)
+      return { data: null, error: err }
+    }
+  },
   // 获取今日已复习单词数（基于 last_reviewed_at）
   getTodayReviewedCount: async (childId: string) => {
     const today = new Date()

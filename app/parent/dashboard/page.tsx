@@ -96,54 +96,36 @@ export default function ParentDashboard() {
     }
   }, [])
 
-  // 加载仪表盘数据
-  useEffect(() => {
+// 加载仪表盘数据 (RPC 一站式版本)
+useEffect(() => {
     if (!selectedChildId || !userProfile) return
 
     const loadDashboardData = async () => {
       setDataLoading(true)
       try {
-        // 优先尝试调用 RPC 函数
-        const { data: rpcData, error: rpcError } = await parent.getChildStats(userProfile.id)
+        console.log('正在获取孩子数据:', selectedChildId)
         
-        let todayReviewed = 0
-        let weeklyStats: Array<{ day: string; count: number }> = []
-        let topErrorWords: Array<any> = []
-        let totalMastered = 0
+        // 调用新的全能 RPC 函数
+        const { data, error } = await parent.getChildDashboardStats(selectedChildId)
 
-        if (!rpcError && rpcData) {
-          // 使用 RPC 返回的数据
-          todayReviewed = rpcData.today_reviewed || 0
-          weeklyStats = rpcData.weekly_stats || []
-          topErrorWords = rpcData.top_error_words || []
-          totalMastered = rpcData.total_mastered || 0
-        } else {
-          // RPC 失败，使用直接查询
-          console.log('RPC 函数不可用，使用直接查询')
-          
-          // 获取今日已复习单词数
-          const { count: todayCount } = await parent.getTodayReviewedCount(selectedChildId)
-          todayReviewed = todayCount
-
-          // 获取周报数据
-          const { data: weeklyData } = await parent.getWeeklyMasteredStats(selectedChildId)
-          weeklyStats = weeklyData || []
-
-          // 获取错误最多的单词
-          const { data: errorWords } = await parent.getTopErrorWords(selectedChildId, 5)
-          topErrorWords = errorWords || []
-
-          // 获取总掌握数
-          const { count: masteredCount } = await words.getMasteredCount(selectedChildId)
-          totalMastered = masteredCount
+        if (error) {
+          console.error('RPC 调用出错:', error)
+          return
         }
 
-        setDashboardData({
-          todayReviewed,
-          weeklyStats,
-          topErrorWords,
-          totalMastered,
-        })
+        if (data) {
+          console.log('看板数据加载成功:', data)
+          
+          // 直接使用 RPC 返回的 JSON 数据
+          // 注意：RPC 返回的 key 可能会是驼峰或全小写，取决于数据库。
+          // 我们在 SQL 里用了 json_build_object 指定了 key，所以应该是准确的。
+          setDashboardData({
+            todayReviewed: data.todayReviewed || 0,
+            totalMastered: data.totalMastered || 0,
+            weeklyStats: data.weeklyStats || [],
+            topErrorWords: data.topErrorWords || []
+          })
+        }
       } catch (error) {
         console.error('加载仪表盘数据失败:', error)
       } finally {
@@ -152,7 +134,7 @@ export default function ParentDashboard() {
     }
 
     loadDashboardData()
-  }, [selectedChildId, userProfile])
+  }, [selectedChildId, userProfile, selectedChild]) // 增加 selectedChild 依赖
 
   // 处理退出登录
   const handleLogout = async () => {

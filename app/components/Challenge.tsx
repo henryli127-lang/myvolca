@@ -287,13 +287,12 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
 
     const correct = checkTranslation(userInput, testWords[currentIndex])
     setIsCorrect(correct)
-    // 确保 showAnswer 被设置为 true，并且不会被重置
-    setShowAnswer(true)
+    setShowAnswer(true) // 关键：设置为显示，且保持显示
 
     const wordId = testWords[currentIndex].id
     let newResults: TestResults = results
     
-    // 更新 wordResults 状态并获取更新后的值
+    // 更新 wordResults 状态
     let updatedWordResults: Map<number, WordResult>
     setWordResults((prev: Map<number, WordResult>) => {
       updatedWordResults = new Map(prev)
@@ -316,10 +315,13 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
       setResults(newResults)
     }
 
-    // 保存进度 - 使用更新后的 wordResults
+    // 保存进度
     setTimeout(() => {
+      // 注意：这里只保存进度，不跳转
       saveTestProgress(testWords, currentIndex, testPhase, newResults, updatedWordResults!)
     }, 0)
+    
+    // ❌ 检查：确保这里没有任何 setTimeout(() => nextQuestion(), ...) 的代码
   }
 
   // 处理拼写测试提交
@@ -646,13 +648,21 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
                   value={userInput}
                   onChange={(e) => setUserInput(e.target.value)}
                   onKeyPress={(e) => {
-                    if (e.key === 'Enter' && !showAnswer) {
-                      handleTranslationSubmit()
+                    if (e.key === 'Enter') {
+                      e.preventDefault() // 防止某些浏览器的默认提交行为
+                      
+                      if (!showAnswer) {
+                        // 还没显示答案时 -> 提交
+                        handleTranslationSubmit()
+                      } else {
+                        // 已经显示答案了 -> 按回车直接去下一题 (这也是很好的体验)
+                        nextQuestion()
+                      }
                     }
                   }}
                   placeholder="请输入中文翻译..."
                   className="w-full px-6 py-4 text-xl border-4 border-candy-blue rounded-2xl focus:outline-none focus:border-candy-green transition-all"
-                  disabled={showAnswer}
+                  disabled={false} // 建议不要 disable，方便用户查看
                 />
                 {showAnswer ? (
                   <motion.div
