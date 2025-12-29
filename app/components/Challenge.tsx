@@ -59,6 +59,8 @@ interface ChallengeProps {
 type TestType = 'translation' | 'spelling'
 type TestPhase = 'translation' | 'spelling' | 'complete'
 
+
+
 export default function Challenge({ user, onComplete, onLogout }: ChallengeProps) {
   const TEST_PROGRESS_KEY = `test_progress_${user.id}`
   
@@ -157,8 +159,11 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
   const [mustTypeCorrect, setMustTypeCorrect] = useState(false)
   const [hasRestoredProgress, setHasRestoredProgress] = useState(!!savedProgress)
   const [showStartMessage, setShowStartMessage] = useState(true)
-  const inputRef = useRef<HTMLInputElement>(null)
 
+  // ...
+const inputRef = useRef<HTMLInputElement>(null)
+// ✅ 新增：标记测试是否正常完成
+const isCompletedRef = useRef(false)
   // 生成拼写提示（提前定义，供 useEffect 使用）
   const generateSpellingHint = (word: string): string => {
     const length = word.length
@@ -170,6 +175,7 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
       return word[0] + '_'.repeat(length - 2) + word[length - 1]
     }
   }
+
 
   // 获取测试单词（5-10个）或恢复保存的进度
   useEffect(() => {
@@ -281,35 +287,35 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
     return false
   }
 
-  // 处理翻译测试提交
-  const handleTranslationSubmit = () => {
+ // ✅ 修复版：同步计算状态，不依赖副作用
+const handleTranslationSubmit = () => {
     if (!testWords[currentIndex]) return
-
+  
     const correct = checkTranslation(userInput, testWords[currentIndex])
     const wordId = testWords[currentIndex].id
-    
-    // 1. 先计算出新的状态值（同步计算，不依赖 setState 的副作用）
+  
+    // 1. 先计算出新的状态值 (同步计算)
     const newWordResults = new Map(wordResults)
     const existing = newWordResults.get(wordId) || { translationError: false, spellingError: false }
+    // 如果答错，标记错误；如果答对，清除错误标记(可选，这里保留错误记录)
     newWordResults.set(wordId, { ...existing, translationError: !correct })
-    
+  
     let newResults = { ...results }
     if (correct) {
       newResults.translationCorrect += 1
     } else {
       newResults.translationErrors += 1
     }
-
+  
     // 2. 更新 React 状态
     setIsCorrect(correct)
     setShowAnswer(true) // 确保这里设为 true
     setWordResults(newWordResults)
     setResults(newResults)
-
-    // 3. 保存进度（现在数据是绝对安全的）
+  
+    // 3. 保存进度 (直接使用计算好的变量，安全)
     saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults)
   }
-
     // 保存进度
     //setTimeout(() => {
       // 注意：这里只保存进度，不跳转
@@ -398,6 +404,8 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
         }
       } else {
         // 测试完成，清除进度并传递单词结果
+        // ✅ 新增：标记为已完成，防止卸载时再次保存
+  isCompletedRef.current = true
         clearTestProgress()
         try {
           onComplete({
@@ -473,17 +481,20 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
   }, [testPhase, currentIndex, testWords])
 
   // 在组件卸载或退出时保存测试进度
-  useEffect(() => {
+// 在组件卸载或退出时保存测试进度
+useEffect(() => {
     const handleBeforeUnload = () => {
-      if (testWords.length > 0) {
+      // ✅ 修改：只有未完成时才保存
+      if (testWords.length > 0 && !isCompletedRef.current) {
         saveTestProgress(testWords, currentIndex, testPhase, results, wordResults)
       }
     }
-
+  
     window.addEventListener('beforeunload', handleBeforeUnload)
-
+  
     return () => {
-      if (testWords.length > 0) {
+      // ✅ 修改：组件卸载时，只有在“未完成”状态下才保存
+      if (testWords.length > 0 && !isCompletedRef.current) {
         saveTestProgress(testWords, currentIndex, testPhase, results, wordResults)
       }
       window.removeEventListener('beforeunload', handleBeforeUnload)
@@ -642,7 +653,7 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
                   type="text"
                   value={userInput}
                   onChange={(e) => setUserInput(e.target.value)}
-                  onKeyPress={(e) => {
+                  onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault() // 防止某些浏览器的默认提交行为
                       
@@ -691,8 +702,9 @@ export default function Challenge({ user, onComplete, onLogout }: ChallengeProps
                   type="text"
                   value={userInput}
                   onChange={(e) => setUserInput(e.target.value)}
-                  onKeyPress={(e) => {
+                  onKeyDown={(e) => {
                     if (e.key === 'Enter') {
+                      e.preventDefault() // 防止某些浏览器的默认提交行为
                       if (!showAnswer) {
                         // 第一次提交
                         handleSpellingSubmit()
