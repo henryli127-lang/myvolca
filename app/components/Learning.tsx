@@ -53,6 +53,7 @@ export default function Learning({ user, targetCount, onComplete, onLogout }: Le
   const LEARNING_PROGRESS_KEY = `learning_progress_${user.id}`
   // ✅ 添加这一行，解决 "audioRef is not defined" 报错
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const lastPlayedWordRef = useRef<string | null>(null) // 跟踪上次播放的单词，防止重复播放
   // 从 localStorage 恢复学习进度
 // 从 localStorage 恢复学习进度 (修改版：支持恢复完整单词列表)
 const loadProgress = () => {
@@ -133,48 +134,162 @@ const loadProgress = () => {
     }
   }, [])
 
-  // 获取随机单词（排除已学习的单词）
-  const fetchRandomWord = useCallback(async () => {
-    setLoading(true)
-    setIsFlipped(false)
+  // 从缓存中获取下一个单词
+  const getNextWordFromCache = useCallback(() => {
+    const wordListKey = `word_list_${user.id}`
+    const saved = localStorage.getItem(wordListKey)
     
-    let attempts = 0
-    const maxAttempts = 50
-    
-    while (attempts < maxAttempts) {
-      const { data, error } = await words.getRandomUnmastered(user.id)
-      
-      if (error || !data) {
-        console.error('获取单词失败:', error)
-        setLoading(false)
-        return
-      }
-      
-      // 使用 ref 同步检查这个单词是否已经学习过
-      if (!learnedWordIdsRef.current.has(data.id)) {
-        // 如果这个单词还没有学习过，使用它
-        setWord(data as Word)
-        setLoading(false)
-        return
-      }
-      
-      attempts++
+    if (!saved) {
+      return null
     }
     
-    // 如果尝试多次都找不到新单词，说明单词不够了
-    console.warn('无法找到更多未学习的单词')
-    setLoading(false)
+    try {
+      const parsed = JSON.parse(saved)
+      if (!parsed.words || !Array.isArray(parsed.words)) {
+        return null
+      }
+      
+      // 找到第一个未学习的单词
+      const unlearnedWord = parsed.words.find((w: Word) => 
+        !learnedWordIdsRef.current.has(Number(w.id))
+      )
+      
+      if (unlearnedWord) {
+        // ✅ 确保所有字段都被保留，特别是 sentence_en 和 sentence_cn
+        const word: Word = {
+          id: Number(unlearnedWord.id),
+          word: unlearnedWord.word,
+          translation: unlearnedWord.translation,
+          pos: unlearnedWord.pos,
+          mnemonic: unlearnedWord.mnemonic,
+          sentence_en: unlearnedWord.sentence_en,
+          sentence_cn: unlearnedWord.sentence_cn,
+          keywords: unlearnedWord.keywords,
+          is_review: unlearnedWord.is_review || false
+        }
+        return word
+      }
+      
+      return null
+    } catch (error) {
+      console.error('解析缓存单词列表失败:', error)
+      return null
+    }
   }, [user.id])
 
-  // 初始化：如果已有进度，恢复进度；否则获取新单词
+  // 初始化：加载或获取单词列表
   useEffect(() => {
-    // 如果已有学习进度，恢复进度并获取下一个单词
-    if (learnedCount > 0 && learnedWordIdsRef.current.size > 0) {
-      console.log(`恢复学习进度: ${learnedCount}/${TARGET_WORDS}，已学习单词数: ${learnedWordIdsRef.current.size}`)
+    const initializeWords = async () => {
+      const wordListKey = `word_list_${user.id}`
+      const saved = localStorage.getItem(wordListKey)
+      
+      // 检查是否有缓存
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          if (parsed.words && Array.isArray(parsed.words) && parsed.words.length > 0) {
+            // 有缓存，检查是否有未完成的单词
+            const unlearnedCount = parsed.words.filter((w: Word) => 
+              !learnedWordIdsRef.current.has(Number(w.id))
+            ).length
+            
+            if (unlearnedCount > 0) {
+              // 有未完成的单词，使用缓存
+              console.log(`从缓存恢复学习，还有 ${unlearnedCount} 个单词未学习`)
+              const nextWord = getNextWordFromCache()
+              if (nextWord) {
+                // ✅ 确保单词对象包含所有字段
+                const wordData: Word = {
+                  id: Number(nextWord.id),
+                  word: nextWord.word,
+                  translation: nextWord.translation,
+                  pos: nextWord.pos,
+                  mnemonic: nextWord.mnemonic,
+                  sentence_en: nextWord.sentence_en,
+                  sentence_cn: nextWord.sentence_cn,
+                  keywords: nextWord.keywords,
+                  is_review: nextWord.is_review || false
+                }
+                setWord(wordData)
+                setLoading(false)
+                return
+              }
+            } else {
+              // 缓存中的单词都已学习，需要获取新的
+              console.log('缓存中的单词都已学习，获取新单词')
+              localStorage.removeItem(wordListKey)
+            }
+          }
+        } catch (error) {
+          console.error('解析缓存失败:', error)
+          localStorage.removeItem(wordListKey)
+        }
+      }
+      
+      // 没有缓存或缓存无效，计算需要获取的单词数量
+      const remainingCount = TARGET_WORDS - learnedCount
+      if (remainingCount <= 0) {
+        console.log('已完成所有学习目标')
+        setLoading(false)
+        return
+      }
+      
+      // 一次性获取所需数量的新单词
+      console.log(`开始新的学习会话，获取 ${remainingCount} 个新单词`)
+      setLoading(true)
+      
+      const { data, error } = await words.getNewWordsBatch(user.id, remainingCount)
+      
+      if (error || !data || data.length === 0) {
+        console.error('获取学习单词失败:', error)
+        setLoading(false)
+        return
+      }
+      
+      // 保存到缓存（确保所有字段都被保留）
+      const wordsToCache = data.map((w: any) => {
+        const word: Word = {
+          id: Number(w.id),
+          word: w.word,
+          translation: w.translation,
+          pos: w.pos,
+          mnemonic: w.mnemonic,
+          sentence_en: w.sentence_en,
+          sentence_cn: w.sentence_cn,
+          keywords: w.keywords,
+          is_review: w.is_review || false
+        }
+        return word
+      })
+      
+      
+      localStorage.setItem(wordListKey, JSON.stringify({
+        words: wordsToCache,
+        timestamp: Date.now()
+      }))
+      
+      // 显示第一个单词
+      if (wordsToCache.length > 0) {
+        setWord(wordsToCache[0])
+      }
+      
+      setLoading(false)
     }
-    fetchRandomWord()
+    
+    initializeWords()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 获取下一个单词（从缓存中）
+  const fetchNextWord = useCallback(() => {
+    const nextWord = getNextWordFromCache()
+    if (nextWord) {
+      setWord(nextWord as Word)
+      setIsFlipped(false)
+    } else {
+      console.warn('缓存中没有更多未学习的单词')
+    }
+  }, [getNextWordFromCache])
 
   // 语音朗读函数
   /*const playAudio = useCallback((text: string) => {
@@ -234,11 +349,28 @@ const loadProgress = () => {
 
 
   const playAudio = useCallback(async (text: string, lang: 'en' | 'zh' = 'en') => {
-    if (!text) return
+    if (!text) {
+      console.warn('playAudio: 文本为空，无法播放')
+      return
+    }
+    
+    console.log('playAudio 被调用:', { text: text.substring(0, 50), lang })
+    
+    // ✅ 如果正在播放，直接返回，防止重复播放
+    // 检查 audioRef.current 是否存在且正在播放（更可靠）
+    if (audioRef.current && !audioRef.current.paused && audioRef.current.currentTime > 0) {
+      console.log('音频正在播放，忽略重复调用')
+      return
+    }
+    
+    // 使用 ref 检查 isSpeaking，避免依赖状态
+    // 注意：这里不检查 isSpeaking 状态，因为状态更新是异步的，可能导致竞态条件
+    // 只检查 audioRef.current 的播放状态
+    
     setIsSpeaking(true)
 
     try {
-      // ✅ 停止之前的播放
+      // ✅ 停止之前的播放（如果存在）
       if (audioRef.current) {
         audioRef.current.pause()
         audioRef.current.currentTime = 0
@@ -311,6 +443,10 @@ const loadProgress = () => {
         setIsSpeaking(false)
         URL.revokeObjectURL(url)
         audioRef.current = null
+        // ✅ 音频播放完成后，重置跟踪，允许下次播放
+        if (lastPlayedWordRef.current === text) {
+          lastPlayedWordRef.current = null
+        }
       }
 
       audio.onerror = (e) => {
@@ -324,6 +460,10 @@ const loadProgress = () => {
         setIsSpeaking(false)
         URL.revokeObjectURL(url)
         audioRef.current = null
+        // ✅ 音频播放出错时，也重置跟踪
+        if (lastPlayedWordRef.current === text) {
+          lastPlayedWordRef.current = null
+        }
       }
       
       // 等待音频加载
@@ -354,16 +494,60 @@ const loadProgress = () => {
       if (audioRef.current) {
         audioRef.current = null
       }
+      // ✅ 播放出错时，重置跟踪
+      if (lastPlayedWordRef.current === text) {
+        lastPlayedWordRef.current = null
+      }
     }
-  }, [])
+  }, []) // 移除 isSpeaking 依赖，避免循环触发
+  
+  // 自动播放：只在单词变化且卡片未翻转时播放
   useEffect(() => {
-    if (word && !isFlipped) {
-      const timer = setTimeout(() => {
-        playAudio(word.word, 'en'); // 指定英文
-      }, 500);
-      return () => clearTimeout(timer);
+    // 只在有单词、卡片未翻转、且单词字符串存在时执行
+    if (!word || isFlipped || !word.word) {
+      // 单词变化或卡片翻转时，重置跟踪
+      lastPlayedWordRef.current = null
+      return
     }
-  }, [word, isFlipped, playAudio]);
+    
+    const currentWordText = word.word // 保存当前单词文本
+    
+    // ✅ 如果这个单词已经播放过，不再重复播放
+    if (lastPlayedWordRef.current === currentWordText) {
+      return
+    }
+    
+    // ✅ 如果正在播放其他音频，不自动播放（使用 ref 检查，避免依赖状态）
+    if (audioRef.current && !audioRef.current.paused && audioRef.current.currentTime > 0) {
+      return
+    }
+    
+    // 标记为已播放，防止重复触发（在设置定时器之前就标记）
+    lastPlayedWordRef.current = currentWordText
+    
+    const timer = setTimeout(() => {
+      // 再次检查，确保在延迟期间没有开始播放其他音频，且单词没有变化
+      if ((!audioRef.current || audioRef.current.paused) && 
+          lastPlayedWordRef.current === currentWordText &&
+          word && word.word === currentWordText) {
+        console.log('自动播放单词:', currentWordText)
+        playAudio(currentWordText, 'en')
+      } else {
+        // 如果条件不满足，重置标记，允许下次播放
+        if (lastPlayedWordRef.current === currentWordText) {
+          lastPlayedWordRef.current = null
+        }
+      }
+    }, 500)
+    
+    return () => {
+      clearTimeout(timer)
+      // 如果组件卸载或单词变化，且定时器还没执行，重置标记
+      if (lastPlayedWordRef.current === currentWordText) {
+        lastPlayedWordRef.current = null
+      }
+    }
+  }, [word?.word, isFlipped]) // 只依赖 word.word 和 isFlipped，不依赖 playAudio
 
 
   const handleCardClick = () => {
@@ -413,16 +597,16 @@ const loadProgress = () => {
           onComplete()
         }, 2000)
       } else {
-        // 否则获取下一个单词
-        await fetchRandomWord()
+        // 否则获取下一个单词（从缓存中）
+        fetchNextWord()
       }
     } catch (error) {
       console.error('更新学习进度失败:', error)
     }
   }
 
-  const handleNotSure = async () => {
-    await fetchRandomWord()
+  const handleNotSure = () => {
+    fetchNextWord()
   }
 
   if (loading || !word) {
@@ -550,7 +734,10 @@ const loadProgress = () => {
                           whileTap={{ scale: 0.9 }}
                           onClick={(e) => {
                             e.stopPropagation()
-                            playAudio(word.sentence_en!, 'en')
+                            e.preventDefault()
+                            if (word.sentence_en) {
+                              playAudio(word.sentence_en, 'en')
+                            }
                           }}
                           className={`p-2 rounded-full transition-all ${
                             isSpeaking

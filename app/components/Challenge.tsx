@@ -162,7 +162,9 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
   const [showStartMessage, setShowStartMessage] = useState(true)
 
   // ...
-const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [isSpeaking, setIsSpeaking] = useState(false)
 // ✅ 新增：标记测试是否正常完成
 const isCompletedRef = useRef(false)
 // ✅ 新增：防止回车键连击的锁
@@ -178,6 +180,131 @@ const lastSubmissionTime = useRef(0)
       return word[0] + '_'.repeat(length - 1)
     } else {
       return word[0] + '_'.repeat(length - 2) + word[length - 1]
+    }
+  }
+
+  // 音频播放函数
+  const playAudio = async (text: string, lang: 'en' | 'zh' = 'en') => {
+    if (!text) return
+    setIsSpeaking(true)
+
+    try {
+      // 停止之前的播放
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+        audioRef.current = null
+      }
+
+      console.log('正在请求 TTS:', { text: text.substring(0, 50), lang })
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, lang }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('TTS API 错误:', response.status, errorText)
+        throw new Error(`TTS failed: ${response.status} ${errorText}`)
+      }
+
+      let blob = await response.blob()
+      if (blob.size === 0) {
+        console.error('TTS 返回空音频')
+        throw new Error('Empty audio blob')
+      }
+
+      // 验证 blob 类型
+      console.log('Received audio blob:', { size: blob.size, type: blob.type })
+      
+      // 读取 blob 的前几个字节，验证是否是有效的音频格式
+      const arrayBuffer = await blob.arrayBuffer()
+      const uint8Array = new Uint8Array(arrayBuffer)
+      const firstBytes = Array.from(uint8Array.slice(0, 10)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')
+      console.log('Audio data first bytes:', firstBytes)
+      
+      // 检查是否是有效的 MP3 格式（MP3 通常以 0xFF 0xFB 或 ID3 标签开头）
+      const isValidMP3 = uint8Array[0] === 0xFF && (uint8Array[1] & 0xE0) === 0xE0 || // MP3 frame sync
+                         (uint8Array[0] === 0x49 && uint8Array[1] === 0x44 && uint8Array[2] === 0x33) // ID3 tag
+      
+      if (!isValidMP3) {
+        console.warn('Audio data may not be valid MP3, first bytes:', firstBytes)
+        // 尝试查找 MP3 帧头
+        let mp3StartIndex = -1
+        for (let i = 0; i < Math.min(100, uint8Array.length - 1); i++) {
+          if (uint8Array[i] === 0xFF && (uint8Array[i + 1] & 0xE0) === 0xE0) {
+            mp3StartIndex = i
+            break
+          }
+        }
+        if (mp3StartIndex > 0) {
+          console.log(`Found MP3 frame at index ${mp3StartIndex}, trimming...`)
+          const trimmedBuffer = arrayBuffer.slice(mp3StartIndex)
+          blob = new Blob([trimmedBuffer], { type: 'audio/mpeg' })
+        }
+      }
+      
+      // 如果 Content-Type 不正确，尝试修复
+      let audioBlob = blob
+      if (!blob.type || !blob.type.startsWith('audio/')) {
+        console.warn('Blob type is not audio, creating new blob with audio/mpeg type')
+        audioBlob = new Blob([blob], { type: 'audio/mpeg' })
+      }
+
+      const url = URL.createObjectURL(audioBlob)
+      const audio = new Audio(url)
+      
+      // 赋值给 Ref 
+      audioRef.current = audio
+
+      audio.onended = () => {
+        setIsSpeaking(false)
+        URL.revokeObjectURL(url)
+        audioRef.current = null
+      }
+
+      audio.onerror = (e) => {
+        console.error('音频播放错误:', e)
+        console.error('Audio element error details:', {
+          error: audio.error,
+          networkState: audio.networkState,
+          readyState: audio.readyState,
+          src: audio.src.substring(0, 50)
+        })
+        setIsSpeaking(false)
+        URL.revokeObjectURL(url)
+        audioRef.current = null
+      }
+      
+      // 等待音频加载
+      await new Promise((resolve, reject) => {
+        audio.oncanplaythrough = () => {
+          console.log('Audio can play through')
+          resolve(null)
+        }
+        audio.onerror = (e) => {
+          console.error('Audio load error:', e)
+          reject(new Error('Audio load failed'))
+        }
+        // 超时保护
+        setTimeout(() => {
+          if (audio.readyState < 2) {
+            reject(new Error('Audio load timeout'))
+          } else {
+            resolve(null)
+          }
+        }, 5000)
+      })
+      
+      await audio.play()
+      console.log('音频播放开始')
+    } catch (error) {
+      console.error('Playback error:', error)
+      setIsSpeaking(false)
+      if (audioRef.current) {
+        audioRef.current = null
+      }
     }
   }
 
@@ -211,16 +338,18 @@ const lastSubmissionTime = useRef(0)
           if (saved) {
             const parsed = JSON.parse(saved)
             // 检查缓存是否有效（24小时内且包含单词）
-            if (parsed.words && Array.isArray(parsed.words) && parsed.words.length > 0 && 
-                parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+            const isValidTime = parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000
+            const hasWords = parsed.words && Array.isArray(parsed.words) && parsed.words.length > 0
+            
+            if (hasWords && isValidTime) {
               wordsList = parsed.words.map((w: any) => ({
                 ...w,
                 id: Number(w.id),
                 is_review: w.is_review || false
               }))
-              console.log(`从缓存加载 ${wordsList.length} 个测试单词`)
+              console.log(`从缓存加载 ${wordsList.length} 个单词`)
             } else {
-              // 缓存无效，清除它
+              // 缓存无效（时间过期或没有单词），清除它
               localStorage.removeItem(savedListKey)
               console.log('单词列表缓存无效，已清除')
             }
@@ -232,15 +361,26 @@ const lastSubmissionTime = useRef(0)
         }
       }
 
-      // 如果没有保存的列表或缓存无效，调用 RPC 获取
+      // 根据缓存数量和目标数量决定如何处理
       if (wordsList.length === 0) {
-        console.log('调用 RPC 获取新的单词列表')
+        // 没有缓存，直接获取 testCount 个单词
+        console.log(`没有缓存，调用 RPC 获取 ${testCount} 个测试单词`)
         const { data, error } = await words.getWordsForSession(user.id, testCount)
         if (error || !data || data.length === 0) {
           console.error('获取测试单词失败:', error)
           return
         }
-        wordsList = data
+        wordsList = data.map((w: any) => ({
+          ...w,
+          id: Number(w.id),
+          is_review: w.is_review || false
+        }))
+        
+        // 如果返回的单词数量超过 testCount，截取前 testCount 个
+        if (wordsList.length > testCount) {
+          console.warn(`RPC 返回了 ${wordsList.length} 个单词，但目标数量是 ${testCount}，截取前 ${testCount} 个`)
+          wordsList = wordsList.slice(0, testCount)
+        }
         
         // 保存到缓存
         if (typeof window !== 'undefined') {
@@ -253,6 +393,48 @@ const lastSubmissionTime = useRef(0)
             console.error('保存单词列表失败:', error)
           }
         }
+      } else if (wordsList.length < testCount) {
+        // 缓存数量少于目标数量，补充缺少的数量
+        const needCount = testCount - wordsList.length
+        console.log(`缓存有 ${wordsList.length} 个单词，需要补充 ${needCount} 个`)
+        
+        const { data, error } = await words.getWordsForSession(user.id, needCount)
+        if (error || !data || data.length === 0) {
+          console.error('获取补充单词失败:', error)
+          // 即使补充失败，也使用现有的缓存单词
+        } else {
+          const additionalWords = data.map((w: any) => ({
+            ...w,
+            id: Number(w.id),
+            is_review: w.is_review || false
+          }))
+          
+          // 合并单词列表（避免重复）
+          const existingIds = new Set(wordsList.map((w: Word) => w.id))
+          const newWords = additionalWords.filter((w: Word) => !existingIds.has(w.id))
+          wordsList = [...wordsList, ...newWords]
+          
+          // 如果总数超过 testCount，截取前 testCount 个
+          if (wordsList.length > testCount) {
+            wordsList = wordsList.slice(0, testCount)
+          }
+          
+          // 更新缓存
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(savedListKey, JSON.stringify({
+                words: wordsList,
+                timestamp: Date.now()
+              }))
+            } catch (error) {
+              console.error('更新单词列表缓存失败:', error)
+            }
+          }
+        }
+      } else if (wordsList.length > testCount) {
+        // 缓存数量多于目标数量，从缓存中选取 testCount 个
+        console.log(`缓存有 ${wordsList.length} 个单词，但目标数量是 ${testCount}，选取前 ${testCount} 个`)
+        wordsList = wordsList.slice(0, testCount)
       }
 
       // 统计复习词和新词数量
@@ -269,7 +451,7 @@ const lastSubmissionTime = useRef(0)
     }
 
     fetchTestWords()
-  }, [user.id, hasRestoredProgress, testWords.length, testPhase, currentIndex])
+  }, [user.id, hasRestoredProgress, testWords.length, testPhase, currentIndex, testCount]) // ✅ 添加 testCount 作为依赖项
 
   // 检查翻译答案
   const checkTranslation = (input: string, word: Word): boolean => {
@@ -390,8 +572,11 @@ const handleTranslationSubmit = () => {
       setResults(newResults)
       
       // ✅ 关键修复：答错的瞬间立即保存！
-      // 这样即使刷新页面，系统也记得这题“已经错过一次了”
+      // 这样即使刷新页面，系统也记得这题"已经错过一次了"
       saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults)
+
+      // ✅ 拼写错误时自动播放单词发音
+      playAudio(testWords[currentIndex].word, 'en')
 
       // UI 处理
       setUserInput('')
@@ -478,21 +663,29 @@ useEffect(() => {
         const newWordResults = new Map(wordResults)
         const existing = newWordResults.get(currentWord.id) || { translationError: false, spellingError: false }
         
+        // ✅ 关键修复：当用户重新输入正确答案时，这个单词应该被统计为"正确"
+        // 但是 spellingErrors 不应该减少（因为确实错过一次）
+        // 所以需要增加 spellingCorrect，但保持 spellingErrors 不变
+        const newResults = { ...results }
+        
+        // 检查这个单词是否已经被统计过（避免重复统计）
+        // 计算当前已统计的单词数
+        const currentTotal = results.spellingCorrect + results.spellingErrors
+        const expectedTotal = currentIndex + 1 // 当前应该处理的单词数（包括当前单词）
+        
+        // 如果统计数少于应该处理的单词数，说明这个单词还没有被统计
+        // 现在用户答对了（虽然第一次答错了），应该增加 spellingCorrect
+        if (currentTotal < expectedTotal) {
+          // 这个单词还没有被统计为正确，现在答对了，增加 spellingCorrect
+          newResults.spellingCorrect = results.spellingCorrect + 1
+        }
+        
         // 保持之前的错误记录 (spellingError: true)，不要洗白
         newWordResults.set(currentWord.id, { ...existing, spellingError: existing.spellingError })
         
-        // ❌ 删除原来的分数修改逻辑
-        /* const newResults = {
-          ...results,
-          spellingCorrect: results.spellingCorrect + 1,
-          spellingErrors: Math.max(0, results.spellingErrors - 1),
-        }
-        */
-        
-        // ✅ 2. 只更新 WordResults，保持 results 分数不变
-        // 因为错误已经在第一次提交时（handleSpellingSubmit 的 else 分支）被记录了
+        // 更新状态
         setWordResults(newWordResults)
-        // setResults(newResults) // 不需要更新 results
+        setResults(newResults)
         
         // ✅ 3. 保存进度 (传入当前的 results 即可)
         saveTestProgress(testWords, currentIndex, testPhase, results, newWordResults)

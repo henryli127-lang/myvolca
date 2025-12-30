@@ -335,7 +335,71 @@ export const words = {
     return { count: data?.length || 0, error }
   },
 
+  // 获取新单词批次（用于背单词部分）
+  getNewWordsBatch: async (userId: string, limit: number = 20) => {
+    try {
+      const { data, error } = await supabase.rpc('get_new_words_batch', {
+        p_user_id: userId,
+        p_limit: limit
+      })
+      
+      if (error) {
+        console.error('调用 get_new_words_batch RPC 失败:', error)
+        return { data: null, error }
+      }
+
+      if (!data || data.length === 0) {
+        return { data: [], error: null }
+      }
+
+      // ✅ 获取单词ID列表，然后查询完整的单词信息（包括 sentence_en 和 sentence_cn）
+      const wordIds = data.map((w: any) => Number(w.id))
+      
+      // 查询完整的单词信息
+      const { data: fullWords, error: wordsError } = await supabase
+        .from('words')
+        .select('id, word, translation, pos, mnemonic, sentence_en, sentence_cn, keywords')
+        .in('id', wordIds)
+      
+      if (wordsError) {
+        console.error('查询完整单词信息失败:', wordsError)
+        // 如果查询失败，至少返回 RPC 返回的数据
+        const words = data.map((word: any) => ({
+          ...word,
+          id: Number(word.id),
+          is_review: word.is_review || false,
+          sentence_en: word.sentence_en || null,
+          sentence_cn: word.sentence_cn || null
+        }))
+        return { data: words, error: null }
+      }
+
+      // 合并 RPC 返回的 is_review 信息和完整单词信息
+      const wordsMap = new Map(fullWords?.map((w: any) => [w.id, w]) || [])
+      const words = data.map((word: any) => {
+        const fullWord = wordsMap.get(Number(word.id))
+        return {
+          id: Number(word.id),
+          word: fullWord?.word || word.word,
+          translation: fullWord?.translation || word.translation,
+          pos: fullWord?.pos || word.pos,
+          mnemonic: fullWord?.mnemonic || word.mnemonic,
+          sentence_en: fullWord?.sentence_en || word.sentence_en || null,
+          sentence_cn: fullWord?.sentence_cn || word.sentence_cn || null,
+          keywords: fullWord?.keywords || word.keywords,
+          is_review: word.is_review || false
+        }
+      })
+
+      return { data: words, error: null }
+    } catch (err: any) {
+      console.error('调用 get_new_words_batch RPC 异常:', err)
+      return { data: null, error: err }
+    }
+  },
+
   // 获取学习会话的单词（基于艾宾浩斯记忆曲线，包含错题复习、旧词巩固、新词学习）
+  // 用于测试部分补充单词
   getWordsForSession: async (userId: string, limit: number = 30) => {
     try {
       const { data, error } = await supabase.rpc('get_words_for_session', {
@@ -348,12 +412,48 @@ export const words = {
         return { data: null, error }
       }
 
-      // 确保 id 为 number 类型（int8）
-      const words = data?.map((word: any) => ({
-        ...word,
-        id: Number(word.id),
-        is_review: word.is_review || false
-      })) || []
+      if (!data || data.length === 0) {
+        return { data: [], error: null }
+      }
+
+      // ✅ 获取单词ID列表，然后查询完整的单词信息（包括 sentence_en 和 sentence_cn）
+      const wordIds = data.map((w: any) => Number(w.id))
+      
+      // 查询完整的单词信息
+      const { data: fullWords, error: wordsError } = await supabase
+        .from('words')
+        .select('id, word, translation, pos, mnemonic, sentence_en, sentence_cn, keywords')
+        .in('id', wordIds)
+      
+      if (wordsError) {
+        console.error('查询完整单词信息失败:', wordsError)
+        // 如果查询失败，至少返回 RPC 返回的数据
+        const words = data.map((word: any) => ({
+          ...word,
+          id: Number(word.id),
+          is_review: word.is_review || false,
+          sentence_en: word.sentence_en || null,
+          sentence_cn: word.sentence_cn || null
+        }))
+        return { data: words, error: null }
+      }
+
+      // 合并 RPC 返回的 is_review 信息和完整单词信息
+      const wordsMap = new Map(fullWords?.map((w: any) => [w.id, w]) || [])
+      const words = data.map((word: any) => {
+        const fullWord = wordsMap.get(Number(word.id))
+        return {
+          id: Number(word.id),
+          word: fullWord?.word || word.word,
+          translation: fullWord?.translation || word.translation,
+          pos: fullWord?.pos || word.pos,
+          mnemonic: fullWord?.mnemonic || word.mnemonic,
+          sentence_en: fullWord?.sentence_en || word.sentence_en || null,
+          sentence_cn: fullWord?.sentence_cn || word.sentence_cn || null,
+          keywords: fullWord?.keywords || word.keywords,
+          is_review: word.is_review || false
+        }
+      })
 
       return { data: words, error: null }
     } catch (err: any) {

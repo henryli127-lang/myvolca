@@ -30,6 +30,7 @@ export default function ReportCard({ user, results, testWords, onBack, onLogout 
   const [medal, setMedal] = useState<string>('')
   const [saving, setSaving] = useState(true)
 
+
   const translationAccuracy = results.translationTotal > 0 
     ? Math.round((results.translationCorrect / results.translationTotal) * 100) 
     : 0
@@ -39,21 +40,9 @@ export default function ReportCard({ user, results, testWords, onBack, onLogout 
   const overallAccuracy = Math.round((translationAccuracy + spellingAccuracy) / 2)
 
   useEffect(() => {
-    // 保存测试结果到数据库
-    const saveResults = async () => {
+    // 只显示奖牌和触发动画，不保存数据（数据已在 page.tsx 中后台保存）
+    const showMedal = () => {
       try {
-        // 更新每个单词的错误计数（通过 RPC 函数，数据库自动识别当前用户）
-        for (const word of testWords) {
-          const translationError = word.translationError ? 1 : 0
-          const spellingError = word.spellingError ? 1 : 0
-          
-          await userProgress.updateTestResults(
-            word.id,
-            translationError,
-            spellingError
-          )
-        }
-
         // 触发五彩纸屑（动态导入以避免 SSR 问题）
         if (overallAccuracy === 100) {
           setMedal('Kiwi Master 🏆')
@@ -74,15 +63,16 @@ export default function ReportCard({ user, results, testWords, onBack, onLogout 
             })
           })
         }
+        setSaving(false)
       } catch (error) {
-        console.error('保存测试结果失败:', error)
-      } finally {
+        console.error('显示奖牌失败:', error)
         setSaving(false)
       }
     }
 
-    saveResults()
-  }, [user.id, results, testWords, overallAccuracy])
+    // 立即显示，不等待
+    showMedal()
+  }, [overallAccuracy]) // 只依赖 overallAccuracy，避免重复执行
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20 p-6 font-quicksand">
