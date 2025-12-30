@@ -51,7 +51,8 @@ export default function Learning({ user, targetCount, onComplete, onLogout }: Le
   const [showTransition, setShowTransition] = useState(false)
   const TARGET_WORDS = targetCount
   const LEARNING_PROGRESS_KEY = `learning_progress_${user.id}`
-  
+  // ✅ 添加这一行，解决 "audioRef is not defined" 报错
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   // 从 localStorage 恢复学习进度
 // 从 localStorage 恢复学习进度 (修改版：支持恢复完整单词列表)
 const loadProgress = () => {
@@ -176,7 +177,7 @@ const loadProgress = () => {
   }, [])
 
   // 语音朗读函数
-  const playAudio = useCallback((text: string) => {
+  /*const playAudio = useCallback((text: string) => {
     if (!speechSupported || !speechSynthesisRef.current) return
 
     try {
@@ -214,22 +215,156 @@ const loadProgress = () => {
       console.error('播放语音时出错:', error)
       setIsSpeaking(false)
     }
-  }, [speechSupported])
+  }, [speechSupported])*/
 
   // 自动播放
-  useEffect(() => {
-    if (word && !isFlipped && speechSupported) {
-      const timer = setTimeout(() => {
-        playAudio(word.word)
-      }, 500)
-      return () => {
-        clearTimeout(timer)
-        if (speechSynthesisRef.current) {
-          speechSynthesisRef.current.cancel()
+  //useEffect(() => {
+    //if (word && !isFlipped && speechSupported) {
+      //const timer = setTimeout(() => {
+        //playAudio(word.word)
+      //}, 500)
+      //return () => {
+        //clearTimeout(timer)
+        //if (speechSynthesisRef.current) {
+          //speechSynthesisRef.current.cancel()
+        //}
+      //}
+    //}
+  //}, [word, isFlipped, speechSupported, playAudio])
+
+
+  const playAudio = useCallback(async (text: string, lang: 'en' | 'zh' = 'en') => {
+    if (!text) return
+    setIsSpeaking(true)
+
+    try {
+      // ✅ 停止之前的播放
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+        audioRef.current = null
+      }
+
+      console.log('正在请求 TTS:', { text: text.substring(0, 50), lang })
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, lang }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('TTS API 错误:', response.status, errorText)
+        throw new Error(`TTS failed: ${response.status} ${errorText}`)
+      }
+
+      let blob = await response.blob()
+      if (blob.size === 0) {
+        console.error('TTS 返回空音频')
+        throw new Error('Empty audio blob')
+      }
+
+      // 验证 blob 类型
+      console.log('Received audio blob:', { size: blob.size, type: blob.type })
+      
+      // 读取 blob 的前几个字节，验证是否是有效的音频格式
+      const arrayBuffer = await blob.arrayBuffer()
+      const uint8Array = new Uint8Array(arrayBuffer)
+      const firstBytes = Array.from(uint8Array.slice(0, 10)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')
+      console.log('Audio data first bytes:', firstBytes)
+      
+      // 检查是否是有效的 MP3 格式（MP3 通常以 0xFF 0xFB 或 ID3 标签开头）
+      const isValidMP3 = uint8Array[0] === 0xFF && (uint8Array[1] & 0xE0) === 0xE0 || // MP3 frame sync
+                         (uint8Array[0] === 0x49 && uint8Array[1] === 0x44 && uint8Array[2] === 0x33) // ID3 tag
+      
+      if (!isValidMP3) {
+        console.warn('Audio data may not be valid MP3, first bytes:', firstBytes)
+        // 尝试查找 MP3 帧头
+        let mp3StartIndex = -1
+        for (let i = 0; i < Math.min(100, uint8Array.length - 1); i++) {
+          if (uint8Array[i] === 0xFF && (uint8Array[i + 1] & 0xE0) === 0xE0) {
+            mp3StartIndex = i
+            break
+          }
+        }
+        if (mp3StartIndex > 0) {
+          console.log(`Found MP3 frame at index ${mp3StartIndex}, trimming...`)
+          const trimmedBuffer = arrayBuffer.slice(mp3StartIndex)
+          blob = new Blob([trimmedBuffer], { type: 'audio/mpeg' })
         }
       }
+      
+      // 如果 Content-Type 不正确，尝试修复
+      let audioBlob = blob
+      if (!blob.type || !blob.type.startsWith('audio/')) {
+        console.warn('Blob type is not audio, creating new blob with audio/mpeg type')
+        audioBlob = new Blob([blob], { type: 'audio/mpeg' })
+      }
+
+      const url = URL.createObjectURL(audioBlob)
+      const audio = new Audio(url)
+      
+      // ✅ 赋值给 Ref 
+      audioRef.current = audio
+
+      audio.onended = () => {
+        setIsSpeaking(false)
+        URL.revokeObjectURL(url)
+        audioRef.current = null
+      }
+
+      audio.onerror = (e) => {
+        console.error('音频播放错误:', e)
+        console.error('Audio element error details:', {
+          error: audio.error,
+          networkState: audio.networkState,
+          readyState: audio.readyState,
+          src: audio.src.substring(0, 50)
+        })
+        setIsSpeaking(false)
+        URL.revokeObjectURL(url)
+        audioRef.current = null
+      }
+      
+      // 等待音频加载
+      await new Promise((resolve, reject) => {
+        audio.oncanplaythrough = () => {
+          console.log('Audio can play through')
+          resolve(null)
+        }
+        audio.onerror = (e) => {
+          console.error('Audio load error:', e)
+          reject(new Error('Audio load failed'))
+        }
+        // 超时保护
+        setTimeout(() => {
+          if (audio.readyState < 2) {
+            reject(new Error('Audio load timeout'))
+          } else {
+            resolve(null)
+          }
+        }, 5000)
+      })
+      
+      await audio.play()
+      console.log('音频播放开始')
+    } catch (error) {
+      console.error('Playback error:', error)
+      setIsSpeaking(false)
+      if (audioRef.current) {
+        audioRef.current = null
+      }
     }
-  }, [word, isFlipped, speechSupported, playAudio])
+  }, [])
+  useEffect(() => {
+    if (word && !isFlipped) {
+      const timer = setTimeout(() => {
+        playAudio(word.word, 'en'); // 指定英文
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [word, isFlipped, playAudio]);
+
 
   const handleCardClick = () => {
     setIsFlipped(!isFlipped)
@@ -311,7 +446,7 @@ const loadProgress = () => {
     onLogout()
   }
 
-  
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20 p-6 font-quicksand">
@@ -383,24 +518,22 @@ const loadProgress = () => {
                     >
                       {word.word}
                     </motion.h2>
-                    {speechSupported && (
-                      <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          playAudio(word.word)
-                        }}
-                        className={`p-3 rounded-full transition-all ${
-                          isSpeaking
-                            ? 'bg-white/30 text-white animate-pulse'
-                            : 'bg-white/20 hover:bg-white/30 text-white'
-                        }`}
-                        aria-label="朗读单词"
-                      >
-                        <VolumeIcon size={32} className={isSpeaking ? 'animate-pulse' : ''} />
-                      </motion.button>
-                    )}
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        playAudio(word.word, 'en')
+                      }}
+                      className={`p-3 rounded-full transition-all ${
+                        isSpeaking
+                          ? 'bg-white/30 text-white animate-pulse'
+                          : 'bg-white/20 hover:bg-white/30 text-white'
+                      }`}
+                      aria-label="朗读单词"
+                    >
+                      <VolumeIcon size={32} className={isSpeaking ? 'animate-pulse' : ''} />
+                    </motion.button>
                   </div>
                   {/* 新词显示完整例句，复习词不显示 */}
                   {word.sentence_en && !word.is_review && (
@@ -412,24 +545,22 @@ const loadProgress = () => {
                     >
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-white font-semibold text-sm">📝 例句</p>
-                        {speechSupported && (
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              playAudio(word.sentence_en!)
-                            }}
-                            className={`p-2 rounded-full transition-all ${
-                              isSpeaking
-                                ? 'bg-white/30 text-white animate-pulse'
-                                : 'bg-white/20 hover:bg-white/30 text-white'
-                            }`}
-                            aria-label="朗读例句"
-                          >
-                            <VolumeIcon size={20} className={isSpeaking ? 'animate-pulse' : ''} />
-                          </motion.button>
-                        )}
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            playAudio(word.sentence_en!, 'en')
+                          }}
+                          className={`p-2 rounded-full transition-all ${
+                            isSpeaking
+                              ? 'bg-white/30 text-white animate-pulse'
+                              : 'bg-white/20 hover:bg-white/30 text-white'
+                          }`}
+                          aria-label="朗读例句"
+                        >
+                          <VolumeIcon size={20} className={isSpeaking ? 'animate-pulse' : ''} />
+                        </motion.button>
                       </div>
                       <p className="text-white text-base leading-relaxed italic">
                         {word.sentence_en}
