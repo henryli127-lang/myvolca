@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import WebSocket from 'ws';
 
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<NextResponse> {
   try {
     const { text, lang } = await req.json();
     if (!text) {
@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     const connectionId = crypto.randomUUID().replace(/-/g, '').toUpperCase();
     const wsUrl = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&ConnectionId=${connectionId}`;
 
-    return new Promise((resolve) => {
+    return await new Promise<NextResponse>((resolve: (value: NextResponse) => void) => {
       let resolved = false;
       const socket = new WebSocket(wsUrl, {
         headers: {
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
       const startTime = Date.now().toString();
       let connectionOpened = false;
 
-      const safeResolve = (response: NextResponse) => {
+      const safeResolve = (response: NextResponse): void => {
         if (!resolved) {
           resolved = true;
           resolve(response);
