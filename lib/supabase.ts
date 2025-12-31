@@ -336,7 +336,7 @@ export const words = {
   },
 
   // 获取新单词批次（用于背单词部分）
-  getNewWordsBatch: async (userId: string, limit: number = 20) => {
+  /*getNewWordsBatch: async (userId: string, limit: number = 20) => {
     try {
       const { data, error } = await supabase.rpc('get_new_words_batch', {
         p_user_id: userId,
@@ -396,11 +396,39 @@ export const words = {
       console.error('调用 get_new_words_batch RPC 异常:', err)
       return { data: null, error: err }
     }
-  },
+  },*/
+  getNewWordsBatch: async (userId: string, limit: number = 20) => {
+    try {
+      // ✅ RPC 已经返回了所有字段（前提是您的 SQL 函数里 SELECT 了这些字段）
+      const { data, error } = await supabase.rpc('get_new_words_batch', {
+        p_user_id: userId,
+        p_limit: limit
+      })
+      
+      if (error) throw error
 
+      // 直接格式化返回，无需二次查询
+      const words = (data || []).map((word: any) => ({
+        id: Number(word.id),
+        word: word.word,
+        translation: word.translation,
+        pos: word.pos,
+        mnemonic: word.mnemonic,
+        sentence_en: word.sentence_en || null,
+        sentence_cn: word.sentence_cn || null,
+       // keywords: word.keywords, // 确保 SQL 函数里也返回了这个
+        is_review: word.is_review || false
+      }))
+
+      return { data: words, error: null }
+    } catch (err: any) {
+      console.error('获取新词失败:', err)
+      return { data: null, error: err }
+    }
+  },
   // 获取学习会话的单词（基于艾宾浩斯记忆曲线，包含错题复习、旧词巩固、新词学习）
   // 用于测试部分补充单词
-  getWordsForSession: async (userId: string, limit: number = 30) => {
+  /*getWordsForSession: async (userId: string, limit: number = 30) => {
     try {
       const { data, error } = await supabase.rpc('get_words_for_session', {
         p_user_id: userId,
@@ -461,7 +489,39 @@ export const words = {
       return { data: null, error: err }
     }
   },
-}
+}*/
+// lib/supabase.ts 中的 words 对象内
+
+  // 获取学习会话的单词（复习 + 新词）
+  // ✅ 优化版：单次查询，直接映射，包含 keywords
+  getWordsForSession: async (userId: string, limit: number = 30) => {
+    try {
+      const { data, error } = await supabase.rpc('get_words_for_session', {
+        p_user_id: userId,
+        p_limit: limit
+      })
+      
+      if (error) {
+        console.error('调用 get_words_for_session RPC 失败:', error)
+        return { data: null, error }
+      }
+
+      // 直接映射返回的数据，无需二次查询
+      const words = (data || []).map((word: any) => ({
+        id: Number(word.id),
+        word: word.word,
+        translation: word.translation,
+        keywords: word.keywords || [], // ✅ 确保这里拿到 keywords
+        is_review: word.is_review || false
+      }))
+
+      return { data: words, error: null }
+    } catch (err: any) {
+      console.error('调用 get_words_for_session RPC 异常:', err)
+      return { data: null, error: err }
+    }
+  },
+  }
 
 // 学习进度相关
 export const userProgress = {

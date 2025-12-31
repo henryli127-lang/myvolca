@@ -378,10 +378,13 @@ const loadProgress = () => {
       }
 
       console.log('正在请求 TTS:', { text: text.substring(0, 50), lang })
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, lang }),
+      //const response = await fetch('/api/tts', {
+        //method: 'POST',
+        //headers: { 'Content-Type': 'application/json' },
+        //body: JSON.stringify({ text, lang }),
+        const response = await fetch(`/api/tts?text=${encodeURIComponent(text)}&lang=${lang}`, {
+            method: 'GET',
+            // GET 请求不需要 body 和 Content-Type
       })
 
       if (!response.ok) {
@@ -799,7 +802,28 @@ const loadProgress = () => {
                         transition={{ delay: 0.4 }}
                         className="bg-white/30 backdrop-blur-sm rounded-2xl p-5 border-2 border-white/50"
                       >
-                        <p className="text-white font-semibold text-sm mb-2">📝 中文例句</p>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-white font-semibold text-sm">📝 中文例句</p>
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              e.preventDefault()
+                              if (word.sentence_cn) {
+                                playAudio(word.sentence_cn, 'zh')
+                              }
+                            }}
+                            className={`p-2 rounded-full transition-all ${
+                              isSpeaking
+                                ? 'bg-white/30 text-white animate-pulse'
+                                : 'bg-white/20 hover:bg-white/30 text-white'
+                            }`}
+                            aria-label="朗读中文例句"
+                          >
+                            <VolumeIcon size={20} className={isSpeaking ? 'animate-pulse' : ''} />
+                          </motion.button>
+                        </div>
                         <p className="text-white text-base leading-relaxed">
                           {word.sentence_cn}
                         </p>
