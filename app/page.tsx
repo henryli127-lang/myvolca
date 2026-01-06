@@ -84,7 +84,7 @@ export default function Home() {
              setProfileError(true);
           }
         }
-      }, 8000); 
+      }, 15000); 
     }
     return () => {
       if (timer) clearTimeout(timer);
@@ -92,28 +92,41 @@ export default function Home() {
   }, [loading, user, userProfile]);
 
   // 2. 获取用户资料的独立函数
+  // 2. 获取用户资料的独立函数 (修复：移除人为的 5秒 超时限制)
   const fetchUserProfile = async (currentUser: User) => {
     try {
-      setProfileError(false);
-      // 给 fetch 加一个简单的超时，防止永久挂起
-      const fetchPromise = profiles.get(currentUser.id);
-      const timeoutPromise = new Promise<{data:any, error:any}>((resolve) => 
-        setTimeout(() => resolve({data: null, error: 'TIMEOUT'}), 5000)
-      );
+      // 只有在真的没有 profile 时才重置错误状态
+      // setProfileError(false); 
       
-      const { data: profile, error } = await Promise.race([fetchPromise, timeoutPromise]);
+      console.log('正在获取用户资料...');
       
-      if (error || !profile) {
-        console.warn('获取用户资料失败或超时:', error);
-        setProfileError(true);
+      // 🚨 关键修改：移除 Promise.race 和 setTimeout
+      // 既然数据库没有死锁了，我们就耐心等待它返回，不管多久
+      const { data: profile, error } = await profiles.get(currentUser.id);
+      
+      if (error) {
+        console.warn('获取用户资料数据库返回错误:', error);
+        // 只有特定的严重错误才显示错误页，偶尔的网络波动可以容忍
+        if (error.code !== 'PGRST116') { // PGRST116 是"结果为空"，有时是正常的
+             setProfileError(true);
+        }
         return null;
       }
       
+      if (!profile) {
+        console.warn('获取到了空的用户资料');
+        // 如果数据为空，可能是因为触发器还没跑完，暂时不报错，让 UI 等一等
+        return null;
+      }
+      
+      console.log('成功获取用户资料:', profile.role);
+      // 成功获取，清除错误状态
+      setProfileError(false);
       setUserProfile(profile);
       return profile;
     } catch (err) {
       console.error('获取用户资料异常:', err);
-      setProfileError(true);
+      // 网络异常时不一定马上跳转错误页，可以保留当前状态
       return null;
     }
   };
@@ -159,8 +172,10 @@ export default function Home() {
       console.log('Auth状态变更:', event);
 
       if (event === 'SIGNED_IN' && session?.user) {
-        setUser(session.user);
-        if (!userProfile) {
+        // 只有当用户 ID 变了，或者当前内存里没有 userProfile 时，才去请求
+        // 这样可以避免 Token 刷新时重复请求导致的页面闪烁
+        if (session.user.id !== user?.id || !userProfile) {
+           setUser(session.user);
            await fetchUserProfile(session.user);
         }
         setLoading(false);
@@ -171,6 +186,8 @@ export default function Home() {
         setProfileError(false);
         setLoading(false);
       } else if (event === 'TOKEN_REFRESHED') {
+        // Token 刷新完全不需要做任何 UI 变更，也不需要重新 fetch profile
+        console.log('Token 已刷新，保持当前状态');
         setLoading(false);
       }
     });
