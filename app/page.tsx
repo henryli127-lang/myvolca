@@ -167,7 +167,7 @@ export default function Home() {
   }, [user, userProfile]) // 依赖项：只有当 user 或 userProfile 变化时才执行
 
   // ==========================================
-  // 其他逻辑保持不变
+  // 其他逻辑
   // ==========================================
 
   const logStudyDuration = async () => {
@@ -182,18 +182,6 @@ export default function Home() {
         endTime.toISOString(),
         duration
       )
-    }
-  }
-
-  const resetInactivityTimer = () => {
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current)
-    }
-    if (user) {
-      inactivityTimerRef.current = setTimeout(async () => {
-        console.log('10分钟无操作，自动退出')
-        await handleLogout()
-      }, INACTIVITY_TIMEOUT)
     }
   }
 
@@ -240,6 +228,19 @@ export default function Home() {
     
     sessionStartTime.current = new Date()
     sessionId.current = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
+
+  // 重置无操作定时器
+  const resetInactivityTimer = () => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current)
+    }
+    if (user) {
+      inactivityTimerRef.current = setTimeout(async () => {
+        console.log('10分钟无操作，自动退出')
+        await handleLogout()
+      }, INACTIVITY_TIMEOUT)
+    }
   }
 
   // 监听活动
@@ -352,3 +353,137 @@ export default function Home() {
   }
 
   // ==========================================
+  // 渲染层
+  // ==========================================
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+          className="w-16 h-16 border-4 border-candy-blue border-t-transparent rounded-full"
+        />
+        <p className="ml-4 text-candy-blue font-bold">Loading...</p>
+      </div>
+    )
+  }
+
+  if (user && (!userProfile || profileError)) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-red-50 p-6 text-center">
+        <div className="text-4xl mb-4">⚠️</div>
+        <h2 className="text-2xl font-bold text-red-600 mb-2">无法加载用户资料</h2>
+        <p className="text-gray-600 mb-6">请检查网络连接或刷新页面。</p>
+        <div className="flex gap-4">
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-blue-500 text-white rounded-full shadow hover:bg-blue-600 transition"
+          >
+            刷新
+          </button>
+          <button 
+            onClick={() => handleLogout(true)}
+            className="px-6 py-2 bg-gray-500 text-white rounded-full shadow hover:bg-gray-600 transition"
+          >
+            退出
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <Auth onAuthSuccess={handleAuthSuccess} />
+  }
+
+  if (userProfile?.role && userProfile.role !== 'child') {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/parent/dashboard'
+      return <div className="min-h-screen flex items-center justify-center">跳转中...</div>
+    }
+  }
+
+  return (
+    <div className="min-h-screen font-quicksand">
+      {appStage === 'dashboard' && (
+        <div className="absolute top-4 right-4 z-10">
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setShowSettings(true)}
+            className="bg-white/80 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all"
+          >
+            ⚙️ 设置
+          </motion.button>
+        </div>
+      )}
+
+      <AnimatePresence mode="wait">
+        {appStage === 'transition' && (
+          <motion.div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <motion.div className="text-6xl font-bold text-white text-center">
+              Challenge Unlocked! ⚔️
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence mode="wait">
+        {appStage === 'dashboard' && (
+          <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <StudentDashboard
+              user={user}
+              userProfile={userProfile}
+              onStartAdventure={handleStartAdventure}
+              onLogout={() => handleLogout()}
+            />
+          </motion.div>
+        )}
+
+        {appStage === 'learning' && (
+          <motion.div key={`learning-${sessionKey}`} initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }}>
+            <Learning
+              user={user}
+              targetCount={userProfile?.daily_learning_goal || 20}
+              onComplete={handleLearningComplete}
+              onLogout={() => handleLogout()}
+            />
+          </motion.div>
+        )}
+
+        {appStage === 'challenge' && (
+          <motion.div key={`challenge-${sessionKey}`} initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }}>
+            <Challenge
+              user={user}
+              testCount={userProfile?.daily_testing_goal || 30}
+              onComplete={handleChallengeComplete}
+              onLogout={() => handleLogout()}
+            />
+          </motion.div>
+        )}
+
+        {appStage === 'report' && testResults && (
+          <motion.div key="report" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
+            <ReportCard
+              user={user}
+              results={testResults}
+              testWords={testWords}
+              onBack={handleBackToDashboard}
+              onLogout={() => handleLogout()}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {showSettings && (
+        <Settings
+          userId={user.id}
+          userProfile={userProfile}
+          onClose={() => setShowSettings(false)}
+          onProfileUpdate={(profile) => setUserProfile(profile)}
+        />
+      )}
+    </div>
+  )
+}
