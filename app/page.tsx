@@ -214,21 +214,63 @@ export default function Home() {
     }
   }
 
-  const handleLogout = async () => {
+  // 🚀 修改：强健的登出函数
+  const handleLogout = async (force: boolean = false) => {
+    console.log('正在执行登出流程...');
+    
+    // 1. 立即清除本地计时器
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current)
+      inactivityTimerRef.current = null
+    }
+
+    // 2. 如果是资料加载失败导致的登出，跳过记录日志步骤（防止卡死）
+    // 或者如果是强制登出，也跳过
+    const shouldSkipLog = force || !userProfile || profileError;
+
+    if (!shouldSkipLog) {
+        // 尝试记录日志，但限制超时时间为 2 秒，超时即放弃
+        try {
+            const logPromise = logStudyDuration();
+            const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000));
+            await Promise.race([logPromise, timeoutPromise]);
+        } catch (e) {
+            console.warn('记录学习日志失败或超时，忽略:', e);
+        }
+    }
+
+    // 3. 执行 Supabase 登出，同样限制超时
+    // 即使 Supabase 登出失败，我们也要在本地清除状态
     try {
-      if (inactivityTimerRef.current) {
-        clearTimeout(inactivityTimerRef.current)
-        inactivityTimerRef.current = null
-      }
-      
-      await logStudyDuration()
-      await auth.signOut()
-      // 状态重置由 onAuthStateChange 处理
+        console.log('正在调用 Supabase signOut...');
+        // 给 signOut 一个短超时，防止网络挂起
+        const signOutPromise = auth.signOut();
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject('Timeout'), 3000));
+        await Promise.race([signOutPromise, timeoutPromise]);
     } catch (error) {
-      console.error('退出登录时出错:', error)
-      setUser(null)
-      setUserProfile(null)
-      setAppStage('dashboard')
+        console.error('Supabase 登出请求失败或超时 (将强制清除本地状态):', error);
+    } finally {
+        // 4. 🚨 关键：无论上述步骤成功与否，强制清除本地状态
+        console.log('强制清除本地用户状态');
+        
+        // 清除 LocalStorage
+        if (typeof window !== 'undefined' && user) {
+            try {
+                localStorage.removeItem(`test_progress_${user.id}`)
+                localStorage.removeItem(`word_list_${user.id}`)
+                localStorage.removeItem(`learning_progress_${user.id}`)
+            } catch (e) { console.error(e) }
+        }
+
+        // 强制重置 React 状态 (不再只依赖 onAuthStateChange)
+        setUser(null)
+        setUserProfile(null)
+        setProfileError(false)
+        setAppStage('dashboard')
+        setLoading(false)
+        
+        // 强制刷新页面以确保清理干净 (可选，但推荐)
+        // window.location.reload() 
     }
   }
 
@@ -371,21 +413,26 @@ export default function Home() {
       <div className="min-h-screen flex flex-col items-center justify-center bg-red-50 p-6 text-center">
         <div className="text-4xl mb-4">⚠️</div>
         <h2 className="text-2xl font-bold text-red-600 mb-2">无法加载用户资料</h2>
-        <p className="text-gray-600 mb-6">可能是网络问题或资料不存在。</p>
+        <p className="text-gray-600 mb-6">连接数据库超时或资料不存在。</p>
         <div className="flex gap-4">
           <button 
             onClick={() => window.location.reload()}
             className="px-6 py-2 bg-blue-500 text-white rounded-full shadow hover:bg-blue-600 transition"
           >
-            重试
+            刷新重试
           </button>
           <button 
-            onClick={handleLogout}
-            className="px-6 py-2 bg-gray-500 text-white rounded-full shadow hover:bg-gray-600 transition"
+            // 传递 true 启用强制登出模式
+            onClick={() => handleLogout(true)}
+            className="px-6 py-2 bg-gray-500 text-white rounded-full shadow hover:bg-gray-600 transition hover:scale-105 active:scale-95"
           >
-            退出登录
+            强制退出
           </button>
         </div>
+        <p className="text-xs text-gray-400 mt-8">
+            如果是新注册用户，可能是系统初始化稍有延迟，<br/>
+            请尝试退出后重新登录。
+        </p>
       </div>
     )
   }
