@@ -196,7 +196,8 @@ export default function Home() {
     // 尝试记录日志和登出，给予短超时，避免卡死
     if (!force && user && !profileError) {
         try {
-            const tasks = [auth.signOut()]
+            // 🚨 修复：显式指定数组类型为 Promise<any>[]，允许混合不同类型的 Promise
+            const tasks: Promise<any>[] = [auth.signOut()]
             if (!profileError) tasks.push(logStudyDuration())
             
             // 2秒超时
