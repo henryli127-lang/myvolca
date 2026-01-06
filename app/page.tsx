@@ -39,7 +39,10 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null)
   const [userProfile, setUserProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [profileError, setProfileError] = useState(false) // 记录资料获取失败
+  const [profileError, setProfileError] = useState(false)
+  
+  // 使用 ref 来追踪“正在获取”状态，避免 React 渲染周期的干扰
+  const isFetchingProfile = useRef(false)
 
   const [showSettings, setShowSettings] = useState(false)
   const [appStage, setAppStage] = useState<AppStage>('dashboard')
@@ -49,9 +52,8 @@ export default function Home() {
   const sessionStartTime = useRef<Date>(new Date())
   const sessionId = useRef<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const INACTIVITY_TIMEOUT = 10 * 60 * 1000 // 10分钟
+  const INACTIVITY_TIMEOUT = 10 * 60 * 1000 
 
-  // 检查是否有未完成的测试进度
   const checkTestProgress = (userId: string) => {
     if (typeof window === 'undefined') return false
     try {
@@ -71,134 +73,103 @@ export default function Home() {
     return false
   }
 
-  // 1. Loading 超时保护 (看门狗)
+  // ==========================================
+  // 1. 认证监听 (只负责设置 User)
+  // ==========================================
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (loading) {
-      timer = setTimeout(() => {
-        if (loading) {
-          console.warn('⚠️ 认证检查超时 (8s)，强制结束 Loading 状态');
-          setLoading(false);
-          // 如果超时时有用户但无资料，标记为错误
-          if (user && !userProfile) {
-             setProfileError(true);
-          }
-        }
-      }, 15000); 
-    }
+    let mounted = true
+
+    // 初始化检查
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return
+      if (session?.user) {
+        setUser(session.user)
+        // 注意：这里不设 loading false，等待 Profile 获取完再设
+      } else {
+        setLoading(false) // 没有用户，直接结束 loading 显示登录页
+      }
+    })
+
+    const { data: { subscription } } = auth.onAuthStateChange((event, session) => {
+      if (!mounted) return
+      console.log('Auth状态变更:', event)
+
+      if (event === 'SIGNED_IN' && session?.user) {
+        setUser(session.user)
+        // 同样不在这里设 loading false，交给下面的 Effect
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null)
+        setUserProfile(null)
+        setAppStage('dashboard')
+        setLoading(false)
+        isFetchingProfile.current = false
+      }
+    })
+
     return () => {
-      if (timer) clearTimeout(timer);
+      mounted = false
+      subscription.unsubscribe()
     }
-  }, [loading, user, userProfile]);
+  }, [])
 
-  // 2. 获取用户资料的独立函数
-  // 2. 获取用户资料的独立函数 (修复：移除人为的 5秒 超时限制)
-  const fetchUserProfile = async (currentUser: User) => {
-    try {
-      // 只有在真的没有 profile 时才重置错误状态
-      // setProfileError(false); 
-      
-      console.log('正在获取用户资料...');
-      
-      // 🚨 关键修改：移除 Promise.race 和 setTimeout
-      // 既然数据库没有死锁了，我们就耐心等待它返回，不管多久
-      const { data: profile, error } = await profiles.get(currentUser.id);
-      
-      if (error) {
-        console.warn('获取用户资料数据库返回错误:', error);
-        // 只有特定的严重错误才显示错误页，偶尔的网络波动可以容忍
-        if (error.code !== 'PGRST116') { // PGRST116 是"结果为空"，有时是正常的
-             setProfileError(true);
-        }
-        return null;
-      }
-      
-      if (!profile) {
-        console.warn('获取到了空的用户资料');
-        // 如果数据为空，可能是因为触发器还没跑完，暂时不报错，让 UI 等一等
-        return null;
-      }
-      
-      console.log('成功获取用户资料:', profile.role);
-      // 成功获取，清除错误状态
-      setProfileError(false);
-      setUserProfile(profile);
-      return profile;
-    } catch (err) {
-      console.error('获取用户资料异常:', err);
-      // 网络异常时不一定马上跳转错误页，可以保留当前状态
-      return null;
-    }
-  };
-
-  // 3. 认证初始化与监听
+  // ==========================================
+  // 2. 资料获取 (监听 User 变化，带防重锁)
+  // ==========================================
   useEffect(() => {
-    let mounted = true;
+    const fetchProfile = async () => {
+      // 各种卫语句：如果没有用户，或者已经有资料，或者正在获取，都直接退出
+      if (!user) return
+      if (userProfile) {
+        setLoading(false)
+        return
+      }
+      if (isFetchingProfile.current) return
 
-    const initAuth = async () => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        isFetchingProfile.current = true
+        console.log('🚀 开始获取用户资料...')
         
-        if (sessionError) throw sessionError;
+        // 直接请求，移除所有人为超时限制
+        const { data: profile, error } = await profiles.get(user.id)
 
-        if (mounted && session?.user) {
-          setUser(session.user);
-          const profile = await fetchUserProfile(session.user);
-          
-          if (mounted && profile) {
-            if (profile.role === 'child') {
-              if (checkTestProgress(session.user.id)) {
-                setAppStage('challenge');
-              } else {
-                setAppStage('dashboard');
-              }
+        if (error) {
+           console.error('获取资料出错:', error)
+           // PGRST116 只是代表没找到记录（可能是新用户数据还没写入），不是系统错误
+           if (error.code !== 'PGRST116') {
+             setProfileError(true)
+           }
+        }
+
+        if (profile) {
+          console.log('✅ 成功获取资料:', profile.role)
+          setUserProfile(profile)
+          setProfileError(false)
+
+          // 路由跳转逻辑
+          if (profile.role === 'child') {
+            if (checkTestProgress(user.id)) {
+              setAppStage('challenge')
+            } else {
+              setAppStage('dashboard')
             }
           }
         }
       } catch (err) {
-        console.error('认证初始化异常:', err);
-        if (mounted) {
-           await handleLogout(true); // 出错时强制登出
-        }
+        console.error('获取资料发生异常:', err)
+        setProfileError(true)
       } finally {
-        if (mounted) setLoading(false);
+        isFetchingProfile.current = false
+        setLoading(false) // 无论成功失败，都结束 Loading
       }
-    };
-
-    initAuth();
-
-    const { data: { subscription } } = auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-      console.log('Auth状态变更:', event);
-
-      if (event === 'SIGNED_IN' && session?.user) {
-        // 只有当用户 ID 变了，或者当前内存里没有 userProfile 时，才去请求
-        // 这样可以避免 Token 刷新时重复请求导致的页面闪烁
-        if (session.user.id !== user?.id || !userProfile) {
-           setUser(session.user);
-           await fetchUserProfile(session.user);
-        }
-        setLoading(false);
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setUserProfile(null);
-        setAppStage('dashboard');
-        setProfileError(false);
-        setLoading(false);
-      } else if (event === 'TOKEN_REFRESHED') {
-        // Token 刷新完全不需要做任何 UI 变更，也不需要重新 fetch profile
-        console.log('Token 已刷新，保持当前状态');
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
     }
-  }, []); 
 
-  // 记录学习时长
+    fetchProfile()
+  }, [user, userProfile]) // 依赖项：只有当 user 或 userProfile 变化时才执行
+
+  // ==========================================
+  // 其他逻辑保持不变
+  // ==========================================
+
   const logStudyDuration = async () => {
     if (!user) return
     const endTime = new Date()
@@ -214,59 +185,6 @@ export default function Home() {
     }
   }
 
-  // 🚀 核心修复：强健的登出函数 (支持超时强制退出)
-  const handleLogout = async (force: boolean = false) => {
-    console.log(`执行登出流程 (强制模式: ${force})...`);
-    
-    // 1. 立即清除本地计时器
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current)
-      inactivityTimerRef.current = null
-    }
-
-    // 2. 尝试记录日志 (2秒超时)
-    // 如果是强制退出或资料已报错，直接跳过，防止卡死
-    if (!force && !profileError && user) {
-        try {
-            const logPromise = logStudyDuration();
-            const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000));
-            await Promise.race([logPromise, timeoutPromise]);
-        } catch (e) {
-            console.warn('记录日志超时，忽略');
-        }
-    }
-
-    // 3. 尝试 Supabase 登出 (2秒超时)
-    try {
-        const signOutPromise = auth.signOut();
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject('SignOut Timeout'), 2000));
-        await Promise.race([signOutPromise, timeoutPromise]);
-    } catch (error) {
-        console.error('Supabase 登出超时或失败，继续执行本地清理:', error);
-    } finally {
-        // 4. 🚨 无论如何，强制清除本地状态
-        console.log('强制清除本地状态');
-        if (typeof window !== 'undefined' && user) {
-            try {
-                localStorage.removeItem(`test_progress_${user.id}`)
-                localStorage.removeItem(`word_list_${user.id}`)
-                localStorage.removeItem(`learning_progress_${user.id}`)
-            } catch (e) { console.error(e) }
-        }
-
-        setUser(null)
-        setUserProfile(null)
-        setProfileError(false)
-        setAppStage('dashboard')
-        setLoading(false)
-        
-        // 确保重置 Session ID
-        sessionStartTime.current = new Date()
-        sessionId.current = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    }
-  }
-
-  // 重置无操作定时器
   const resetInactivityTimer = () => {
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current)
@@ -279,7 +197,52 @@ export default function Home() {
     }
   }
 
-  // 监听用户活动
+  const handleLogout = async (force: boolean = false) => {
+    console.log(`执行登出流程 (强制: ${force})...`)
+    
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current)
+      inactivityTimerRef.current = null
+    }
+
+    // 尝试记录日志和登出，给予短超时，避免卡死
+    if (!force && user && !profileError) {
+        try {
+            const tasks = [auth.signOut()]
+            if (!profileError) tasks.push(logStudyDuration())
+            
+            // 2秒超时
+            const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000))
+            await Promise.race([Promise.all(tasks), timeoutPromise])
+        } catch (e) {
+            console.warn('登出/日志记录超时或失败:', e)
+        }
+    } else {
+        // 强制模式或已出错，只尝试登出，不记录日志
+        try { auth.signOut() } catch(e) {}
+    }
+
+    // 强制清理本地状态
+    if (typeof window !== 'undefined' && user) {
+        try {
+            localStorage.removeItem(`test_progress_${user.id}`)
+            localStorage.removeItem(`word_list_${user.id}`)
+            localStorage.removeItem(`learning_progress_${user.id}`)
+        } catch (e) { }
+    }
+
+    setUser(null)
+    setUserProfile(null)
+    setProfileError(false)
+    setAppStage('dashboard')
+    setLoading(false)
+    isFetchingProfile.current = false
+    
+    sessionStartTime.current = new Date()
+    sessionId.current = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
+
+  // 监听活动
   useEffect(() => {
     if (!user) return
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click']
@@ -292,7 +255,7 @@ export default function Home() {
     }
   }, [user])
 
-  // 处理页面切换
+  // 页面切换
   useEffect(() => {
     const handleBeforeUnload = () => { if(user) logStudyDuration() }
     const handleVisibilityChange = () => {
@@ -310,10 +273,9 @@ export default function Home() {
     }
   }, [user])
 
-  const handleAuthSuccess = async (authenticatedUser: User) => {
+  const handleAuthSuccess = (authenticatedUser: User) => {
+    // 这里不需要手动调 fetchUserProfile，因为 setUser 会触发上面的 useEffect
     setUser(authenticatedUser)
-    await fetchUserProfile(authenticatedUser);
-    setLoading(false)
   }
 
   const handleStartAdventure = () => {
@@ -389,141 +351,4 @@ export default function Home() {
     setSessionKey(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   }
 
-  // ============================================
-  // 渲染逻辑
-  // ============================================
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          className="w-16 h-16 border-4 border-candy-blue border-t-transparent rounded-full"
-        />
-        <p className="ml-4 text-candy-blue font-bold">Loading...</p>
-      </div>
-    )
-  }
-
-  // 错误界面
-  if (user && (!userProfile || profileError)) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-red-50 p-6 text-center">
-        <div className="text-4xl mb-4">⚠️</div>
-        <h2 className="text-2xl font-bold text-red-600 mb-2">无法加载用户资料</h2>
-        <p className="text-gray-600 mb-6">数据库连接似乎不稳定。</p>
-        <div className="flex gap-4">
-          <button 
-            onClick={() => window.location.reload()}
-            className="px-6 py-2 bg-blue-500 text-white rounded-full shadow hover:bg-blue-600 transition"
-          >
-            重试
-          </button>
-          <button 
-            onClick={() => handleLogout(true)} // 传递 true 强制退出
-            className="px-6 py-2 bg-gray-500 text-white rounded-full shadow hover:bg-gray-600 transition hover:scale-105 active:scale-95"
-          >
-            强制退出
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // 未登录
-  if (!user) {
-    return <Auth onAuthSuccess={handleAuthSuccess} />
-  }
-
-  // 家长端跳转
-  if (userProfile?.role && userProfile.role !== 'child') {
-    if (typeof window !== 'undefined') {
-      window.location.href = '/parent/dashboard'
-      return <div className="min-h-screen flex items-center justify-center">跳转中...</div>
-    }
-  }
-
-  return (
-    <div className="min-h-screen font-quicksand">
-      {appStage === 'dashboard' && (
-        <div className="absolute top-4 right-4 z-10">
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setShowSettings(true)}
-            className="bg-white/80 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all"
-          >
-            ⚙️ 设置
-          </motion.button>
-        </div>
-      )}
-
-      <AnimatePresence mode="wait">
-        {appStage === 'transition' && (
-          <motion.div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <motion.div className="text-6xl font-bold text-white text-center">
-              Challenge Unlocked! ⚔️
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence mode="wait">
-        {appStage === 'dashboard' && (
-          <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <StudentDashboard
-              user={user}
-              userProfile={userProfile}
-              onStartAdventure={handleStartAdventure}
-              onLogout={() => handleLogout()}
-            />
-          </motion.div>
-        )}
-
-        {appStage === 'learning' && (
-          <motion.div key={`learning-${sessionKey}`} initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }}>
-            <Learning
-              user={user}
-              targetCount={userProfile?.daily_learning_goal || 20}
-              onComplete={handleLearningComplete}
-              onLogout={() => handleLogout()}
-            />
-          </motion.div>
-        )}
-
-        {appStage === 'challenge' && (
-          <motion.div key={`challenge-${sessionKey}`} initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }}>
-            <Challenge
-              user={user}
-              testCount={userProfile?.daily_testing_goal || 30}
-              onComplete={handleChallengeComplete}
-              onLogout={() => handleLogout()}
-            />
-          </motion.div>
-        )}
-
-        {appStage === 'report' && testResults && (
-          <motion.div key="report" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
-            <ReportCard
-              user={user}
-              results={testResults}
-              testWords={testWords}
-              onBack={handleBackToDashboard}
-              onLogout={() => handleLogout()}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {showSettings && (
-        <Settings
-          userId={user.id}
-          userProfile={userProfile}
-          onClose={() => setShowSettings(false)}
-          onProfileUpdate={(profile) => setUserProfile(profile)}
-        />
-      )}
-    </div>
-  )
-}
+  // ==========================================
