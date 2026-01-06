@@ -39,8 +39,8 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null)
   const [userProfile, setUserProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [profileError, setProfileError] = useState(false) // 新增：专门记录资料获取失败的状态
-  
+  const [profileError, setProfileError] = useState(false) // 记录资料获取失败
+
   const [showSettings, setShowSettings] = useState(false)
   const [appStage, setAppStage] = useState<AppStage>('dashboard')
   const [testResults, setTestResults] = useState<TestResults | null>(null)
@@ -59,7 +59,6 @@ export default function Home() {
       const savedTest = localStorage.getItem(testProgressKey)
       if (savedTest) {
         const parsed = JSON.parse(savedTest)
-        // 检查进度是否过期（超过24小时）
         if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
           return true
         } else {
@@ -92,14 +91,20 @@ export default function Home() {
     }
   }, [loading, user, userProfile]);
 
-  // 2. 获取用户资料的独立函数（带重试逻辑）
+  // 2. 获取用户资料的独立函数
   const fetchUserProfile = async (currentUser: User) => {
     try {
       setProfileError(false);
-      const { data: profile, error } = await profiles.get(currentUser.id);
+      // 给 fetch 加一个简单的超时，防止永久挂起
+      const fetchPromise = profiles.get(currentUser.id);
+      const timeoutPromise = new Promise<{data:any, error:any}>((resolve) => 
+        setTimeout(() => resolve({data: null, error: 'TIMEOUT'}), 5000)
+      );
+      
+      const { data: profile, error } = await Promise.race([fetchPromise, timeoutPromise]);
       
       if (error || !profile) {
-        console.warn('获取用户资料失败:', error);
+        console.warn('获取用户资料失败或超时:', error);
         setProfileError(true);
         return null;
       }
@@ -128,7 +133,6 @@ export default function Home() {
           const profile = await fetchUserProfile(session.user);
           
           if (mounted && profile) {
-            // 只有成功获取资料才进行跳转逻辑
             if (profile.role === 'child') {
               if (checkTestProgress(session.user.id)) {
                 setAppStage('challenge');
@@ -141,8 +145,7 @@ export default function Home() {
       } catch (err) {
         console.error('认证初始化异常:', err);
         if (mounted) {
-           await auth.signOut();
-           setUser(null);
+           await handleLogout(true); // 出错时强制登出
         }
       } finally {
         if (mounted) setLoading(false);
@@ -157,12 +160,9 @@ export default function Home() {
 
       if (event === 'SIGNED_IN' && session?.user) {
         setUser(session.user);
-        
-        // 只有当没有 profile 时才去获取，避免重复请求
         if (!userProfile) {
            await fetchUserProfile(session.user);
         }
-        
         setLoading(false);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -179,16 +179,13 @@ export default function Home() {
       mounted = false;
       subscription.unsubscribe();
     }
-  }, []); // 空依赖数组，只在组件挂载时运行
+  }, []); 
 
-  // ... (省略 StudyDuration, Timer, Logout 等中间代码，保持不变) ...
   // 记录学习时长
   const logStudyDuration = async () => {
     if (!user) return
-
     const endTime = new Date()
     const duration = Math.round((endTime.getTime() - sessionStartTime.current.getTime()) / 1000 / 60)
-
     if (duration > 0) {
       await studyLogs.create(
         user.id,
@@ -200,23 +197,9 @@ export default function Home() {
     }
   }
 
-  // 重置无操作定时器
-  const resetInactivityTimer = () => {
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current)
-    }
-    
-    if (user) {
-      inactivityTimerRef.current = setTimeout(async () => {
-        console.log('10分钟无操作，自动退出')
-        await handleLogout()
-      }, INACTIVITY_TIMEOUT)
-    }
-  }
-
-  // 🚀 修改：强健的登出函数
+  // 🚀 核心修复：强健的登出函数 (支持超时强制退出)
   const handleLogout = async (force: boolean = false) => {
-    console.log('正在执行登出流程...');
+    console.log(`执行登出流程 (强制模式: ${force})...`);
     
     // 1. 立即清除本地计时器
     if (inactivityTimerRef.current) {
@@ -224,36 +207,28 @@ export default function Home() {
       inactivityTimerRef.current = null
     }
 
-    // 2. 如果是资料加载失败导致的登出，跳过记录日志步骤（防止卡死）
-    // 或者如果是强制登出，也跳过
-    const shouldSkipLog = force || !userProfile || profileError;
-
-    if (!shouldSkipLog) {
-        // 尝试记录日志，但限制超时时间为 2 秒，超时即放弃
+    // 2. 尝试记录日志 (2秒超时)
+    // 如果是强制退出或资料已报错，直接跳过，防止卡死
+    if (!force && !profileError && user) {
         try {
             const logPromise = logStudyDuration();
             const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000));
             await Promise.race([logPromise, timeoutPromise]);
         } catch (e) {
-            console.warn('记录学习日志失败或超时，忽略:', e);
+            console.warn('记录日志超时，忽略');
         }
     }
 
-    // 3. 执行 Supabase 登出，同样限制超时
-    // 即使 Supabase 登出失败，我们也要在本地清除状态
+    // 3. 尝试 Supabase 登出 (2秒超时)
     try {
-        console.log('正在调用 Supabase signOut...');
-        // 给 signOut 一个短超时，防止网络挂起
         const signOutPromise = auth.signOut();
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject('Timeout'), 3000));
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject('SignOut Timeout'), 2000));
         await Promise.race([signOutPromise, timeoutPromise]);
     } catch (error) {
-        console.error('Supabase 登出请求失败或超时 (将强制清除本地状态):', error);
+        console.error('Supabase 登出超时或失败，继续执行本地清理:', error);
     } finally {
-        // 4. 🚨 关键：无论上述步骤成功与否，强制清除本地状态
-        console.log('强制清除本地用户状态');
-        
-        // 清除 LocalStorage
+        // 4. 🚨 无论如何，强制清除本地状态
+        console.log('强制清除本地状态');
         if (typeof window !== 'undefined' && user) {
             try {
                 localStorage.removeItem(`test_progress_${user.id}`)
@@ -262,15 +237,28 @@ export default function Home() {
             } catch (e) { console.error(e) }
         }
 
-        // 强制重置 React 状态 (不再只依赖 onAuthStateChange)
         setUser(null)
         setUserProfile(null)
         setProfileError(false)
         setAppStage('dashboard')
         setLoading(false)
         
-        // 强制刷新页面以确保清理干净 (可选，但推荐)
-        // window.location.reload() 
+        // 确保重置 Session ID
+        sessionStartTime.current = new Date()
+        sessionId.current = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    }
+  }
+
+  // 重置无操作定时器
+  const resetInactivityTimer = () => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current)
+    }
+    if (user) {
+      inactivityTimerRef.current = setTimeout(async () => {
+        console.log('10分钟无操作，自动退出')
+        await handleLogout()
+      }, INACTIVITY_TIMEOUT)
     }
   }
 
@@ -289,7 +277,7 @@ export default function Home() {
 
   // 处理页面切换
   useEffect(() => {
-    const handleBeforeUnload = () => user && logStudyDuration()
+    const handleBeforeUnload = () => { if(user) logStudyDuration() }
     const handleVisibilityChange = () => {
       if (document.hidden && user) {
         logStudyDuration()
@@ -300,7 +288,6 @@ export default function Home() {
     window.addEventListener('beforeunload', handleBeforeUnload)
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
-      if (user) logStudyDuration()
       window.removeEventListener('beforeunload', handleBeforeUnload)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
@@ -313,7 +300,6 @@ export default function Home() {
   }
 
   const handleStartAdventure = () => {
-    // 检查是否有未完成的测试进度
     if (typeof window !== 'undefined' && user) {
       try {
         const testProgressKey = `test_progress_${user.id}`
@@ -358,9 +344,7 @@ export default function Home() {
         localStorage.removeItem(`test_progress_${user.id}`)
         localStorage.removeItem(`word_list_${user.id}`)
         localStorage.removeItem(`learning_progress_${user.id}`)
-      } catch (error) {
-        console.error('清除缓存失败:', error)
-      }
+      } catch (error) { console.error('清除缓存失败:', error) }
     }
 
     if (user && results.testWords) {
@@ -389,10 +373,9 @@ export default function Home() {
   }
 
   // ============================================
-  // 渲染逻辑改进
+  // 渲染逻辑
   // ============================================
 
-  // 1. 如果正在加载，显示加载动画
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20">
@@ -406,55 +389,44 @@ export default function Home() {
     )
   }
 
-  // 2. 🚀 关键修复：如果加载完成，有用户，但没有资料 (Error 状态)
-  // 提供退出按钮，打破死循环
+  // 错误界面
   if (user && (!userProfile || profileError)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-red-50 p-6 text-center">
         <div className="text-4xl mb-4">⚠️</div>
         <h2 className="text-2xl font-bold text-red-600 mb-2">无法加载用户资料</h2>
-        <p className="text-gray-600 mb-6">连接数据库超时或资料不存在。</p>
+        <p className="text-gray-600 mb-6">数据库连接似乎不稳定。</p>
         <div className="flex gap-4">
           <button 
             onClick={() => window.location.reload()}
             className="px-6 py-2 bg-blue-500 text-white rounded-full shadow hover:bg-blue-600 transition"
           >
-            刷新重试
+            重试
           </button>
           <button 
-            // 传递 true 启用强制登出模式
-            onClick={() => handleLogout(true)}
+            onClick={() => handleLogout(true)} // 传递 true 强制退出
             className="px-6 py-2 bg-gray-500 text-white rounded-full shadow hover:bg-gray-600 transition hover:scale-105 active:scale-95"
           >
             强制退出
           </button>
         </div>
-        <p className="text-xs text-gray-400 mt-8">
-            如果是新注册用户，可能是系统初始化稍有延迟，<br/>
-            请尝试退出后重新登录。
-        </p>
       </div>
     )
   }
 
-  // 3. 如果未认证且未加载中，显示登录页
+  // 未登录
   if (!user) {
     return <Auth onAuthSuccess={handleAuthSuccess} />
   }
 
-  // 4. 家长重定向
+  // 家长端跳转
   if (userProfile?.role && userProfile.role !== 'child') {
     if (typeof window !== 'undefined') {
       window.location.href = '/parent/dashboard'
-      return (
-        <div className="min-h-screen flex items-center justify-center">
-          <p className="text-gray-600">正在跳转到家长看板...</p>
-        </div>
-      )
+      return <div className="min-h-screen flex items-center justify-center">跳转中...</div>
     }
   }
 
-  // 5. 正常渲染应用
   return (
     <div className="min-h-screen font-quicksand">
       {appStage === 'dashboard' && (
@@ -472,18 +444,8 @@ export default function Home() {
 
       <AnimatePresence mode="wait">
         {appStage === 'transition' && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-          >
-            <motion.div
-              initial={{ scale: 0.5, rotate: -180 }}
-              animate={{ scale: 1, rotate: 0 }}
-              exit={{ scale: 0.5, rotate: 180 }}
-              className="text-6xl font-bold text-white text-center"
-            >
+          <motion.div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <motion.div className="text-6xl font-bold text-white text-center">
               Challenge Unlocked! ⚔️
             </motion.div>
           </motion.div>
@@ -497,7 +459,7 @@ export default function Home() {
               user={user}
               userProfile={userProfile}
               onStartAdventure={handleStartAdventure}
-              onLogout={handleLogout}
+              onLogout={() => handleLogout()}
             />
           </motion.div>
         )}
@@ -508,7 +470,7 @@ export default function Home() {
               user={user}
               targetCount={userProfile?.daily_learning_goal || 20}
               onComplete={handleLearningComplete}
-              onLogout={handleLogout}
+              onLogout={() => handleLogout()}
             />
           </motion.div>
         )}
@@ -519,7 +481,7 @@ export default function Home() {
               user={user}
               testCount={userProfile?.daily_testing_goal || 30}
               onComplete={handleChallengeComplete}
-              onLogout={handleLogout}
+              onLogout={() => handleLogout()}
             />
           </motion.div>
         )}
@@ -531,7 +493,7 @@ export default function Home() {
               results={testResults}
               testWords={testWords}
               onBack={handleBackToDashboard}
-              onLogout={handleLogout}
+              onLogout={() => handleLogout()}
             />
           </motion.div>
         )}
