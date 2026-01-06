@@ -109,3 +109,4 @@ WHERE schemaname = 'public'
 2. 检查是否有数据库触发器可能导致递归
 3. 联系 Supabase 支持或查看 Supabase 日志获取更详细的错误信息
 
+

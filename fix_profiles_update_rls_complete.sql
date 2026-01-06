@@ -132,3 +132,4 @@ WHERE event_object_table = 'profiles'
 -- 如果看到 prevent_role_update 触发器，确保它允许从 NULL 更新
 -- 运行 check_and_fix_role_update.sql 来修复
 
+

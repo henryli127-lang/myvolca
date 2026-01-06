@@ -68,3 +68,4 @@ WHERE event_object_table = 'profiles'
 -- 需要等待5分钟后运行：
 -- UPDATE profiles SET role = 'parent' WHERE id = 'test-user-id' AND role = 'child';
 
+

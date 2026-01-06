@@ -73,3 +73,4 @@ SELECT * FROM profiles WHERE email = 'test@example.com';
 4. 如果是家长，前端关联孩子的 parent_id
 5. role 被锁定，无法再修改
 
+

@@ -91,3 +91,4 @@ WHERE routine_schema = 'public'
 -- 注意：需要替换 'test-user-id' 为实际的用户 ID
 -- UPDATE profiles SET role = 'parent' WHERE id = 'test-user-id' AND role IS NULL;
 
+

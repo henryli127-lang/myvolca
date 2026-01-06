@@ -159,3 +159,4 @@ ORDER BY tablename, policyname;
 -- SELECT COUNT(*) FROM words;
 -- SELECT * FROM profiles WHERE id = auth.uid();
 
+

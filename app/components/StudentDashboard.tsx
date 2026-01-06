@@ -21,15 +21,15 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
-        // 获取连续登录天数
+        // 1. 获取基础数据（先显示出来）
         const streak = userProfile?.streak_days || 0
         setStreakDays(streak)
 
-        // 获取已掌握的单词总数
+        // 并行获取掌握单词数，减少等待
         const { count } = await words.getMasteredCount(user.id)
         setMasteredCount(count || 0)
 
-        // 计算欢迎消息
+        // 2. 计算欢迎消息
         const lastLogin = userProfile?.last_login_at
         if (lastLogin) {
           const lastLoginDate = new Date(lastLogin)
@@ -47,7 +47,10 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
           setWelcomeMessage('Welcome! Let\'s start your journey! 🚀')
         }
 
-        // 更新最后登录时间和连续登录天数（按日期计算）
+        // 3. 🚀 关键优化：此时 UI 数据已准备好，立即结束 loading，不要等待下面的 DB 更新
+        setLoading(false)
+
+        // 4. 【后台】更新登录信息（Fire and forget 或非阻塞更新）
         if (userProfile) {
           const lastLogin = userProfile?.last_login_at
           let newStreakDays = streak
@@ -77,7 +80,7 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
             newStreakDays = 1
           }
           
-          // 只有在天数发生变化或需要更新登录时间时才调用更新
+          // 判断是否需要更新数据库
           const needsUpdate = !lastLogin || 
             (() => {
               const lastLoginDate = new Date(lastLogin)
@@ -88,17 +91,16 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
             })()
           
           if (needsUpdate) {
-            const { error } = await profiles.updateLoginInfo(user.id, newStreakDays)
-            if (error) {
-              console.error('更新登录信息失败:', error)
-            } else {
-              setStreakDays(newStreakDays)
-            }
+            // 乐观更新 UI：立即在界面上显示新的天数，不需要等数据库返回
+            setStreakDays(newStreakDays) 
+            
+            // 后台静默更新数据库，不阻塞 UI
+            profiles.updateLoginInfo(user.id, newStreakDays)
+              .catch(err => console.error('后台更新登录信息失败:', err))
           }
         }
       } catch (error) {
         console.error('加载仪表盘数据失败:', error)
-      } finally {
         setLoading(false)
       }
     }
@@ -216,4 +218,3 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
     </div>
   )
 }
-

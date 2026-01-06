@@ -86,3 +86,4 @@ SELECT * FROM pg_policies WHERE tablename = 'profiles';
 -- 在 Supabase Dashboard 的 Logs 中查看实际的 SQL 查询
 -- 检查是否有权限错误或其他问题
 
+

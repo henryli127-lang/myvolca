@@ -14,7 +14,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });
     }
 
-    const voice = lang === 'zh' ? 'zh-CN-Liaoning-XiaobeiNeural' : 'en-US-AnaNeural';
+    const voice = lang === 'zh' ? 'zh-CN-Shaanxi-XiaoniNeural' : 'en-US-AnaNeural';
     
     const connectionId = crypto.randomUUID().replace(/-/g, '').toUpperCase();
     const wsUrl = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&ConnectionId=${connectionId}`;
