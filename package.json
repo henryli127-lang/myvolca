@@ -11,17 +11,18 @@
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/supabase-js": "^2.89.0",
+    "bufferutil": "^4.0.8",
     "canvas-confetti": "^1.9.4",
     "edge-tts-node": "^1.5.7",
     "framer-motion": "^10.16.16",
     "lucide-react": "^0.294.0",
+    "msedge-tts": "^2.0.3",
     "next": "^14.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "recharts": "^3.6.0",
-    "ws": "^8.18.3",
-    "bufferutil": "^4.0.8",
-    "utf-8-validate": "^6.0.3"
+    "utf-8-validate": "^6.0.3",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

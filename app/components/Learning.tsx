@@ -673,50 +673,7 @@ const loadProgress = () => {
     fetchNextWord()
   }
 
-  if (loading || !word) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          className="w-16 h-16 border-4 border-candy-blue border-t-transparent rounded-full"
-        />
-      </div>
-    )
-  }
-
-  // 创建一个包装的退出函数，在退出前保存进度
-  const handleLogoutWithSave = () => {
-    // 确保当前进度已保存（如果用户在学习过程中退出）
-    if (learnedCount > 0 && learnedWordIdsRef.current.size > 0) {
-        saveProgress(learnedCount, learnedWordsRef.current)
-        // 同时保存 word_list，以便测试时使用
-        const wordListKey = `word_list_${user.id}`
-        const saved = localStorage.getItem(wordListKey)
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved)
-            if (parsed.words && Array.isArray(parsed.words)) {
-              // 更新 word_list，保留未学习的单词
-              const unlearnedWords = parsed.words.filter((w: Word) => 
-                !learnedWordIdsRef.current.has(Number(w.id))
-              )
-              if (unlearnedWords.length > 0) {
-                localStorage.setItem(wordListKey, JSON.stringify({
-                  words: unlearnedWords,
-                  timestamp: Date.now()
-                }))
-              }
-            }
-          } catch (error) {
-            console.error('更新 word_list 失败:', error)
-          }
-        }
-    }
-    onLogout()
-  }
-
-  // 页面关闭前保存进度
+  // 页面关闭前保存进度 - 必须在早期返回之前调用，确保 Hook 顺序一致
   useEffect(() => {
     const handleBeforeUnload = () => {
       // 使用 ref 获取最新值，因为 beforeunload 事件可能在状态更新前触发
@@ -770,6 +727,49 @@ const loadProgress = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // 只在组件挂载时设置监听器，使用 ref 访问最新值
+
+  // 创建一个包装的退出函数，在退出前保存进度
+  const handleLogoutWithSave = () => {
+    // 确保当前进度已保存（如果用户在学习过程中退出）
+    if (learnedCount > 0 && learnedWordIdsRef.current.size > 0) {
+        saveProgress(learnedCount, learnedWordsRef.current)
+        // 同时保存 word_list，以便测试时使用
+        const wordListKey = `word_list_${user.id}`
+        const saved = localStorage.getItem(wordListKey)
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved)
+            if (parsed.words && Array.isArray(parsed.words)) {
+              // 更新 word_list，保留未学习的单词
+              const unlearnedWords = parsed.words.filter((w: Word) => 
+                !learnedWordIdsRef.current.has(Number(w.id))
+              )
+              if (unlearnedWords.length > 0) {
+                localStorage.setItem(wordListKey, JSON.stringify({
+                  words: unlearnedWords,
+                  timestamp: Date.now()
+                }))
+              }
+            }
+          } catch (error) {
+            console.error('更新 word_list 失败:', error)
+          }
+        }
+    }
+    onLogout()
+  }
+
+  if (loading || !word) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+          className="w-16 h-16 border-4 border-candy-blue border-t-transparent rounded-full"
+        />
+      </div>
+    )
+  }
 
 
 

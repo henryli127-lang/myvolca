@@ -51,6 +51,8 @@ export default function Home() {
   const [sessionKey, setSessionKey] = useState<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   const sessionStartTime = useRef<Date>(new Date())
   const sessionId = useRef<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`) 
+  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const INACTIVITY_TIMEOUT = 10 * 60 * 1000 
 
   const checkTestProgress = (userId: string) => {
     if (typeof window === 'undefined') return false
@@ -183,42 +185,61 @@ export default function Home() {
     }
   }
 
-  const handleLogout = async (force: boolean = false) => {
-    console.log(`执行登出流程 (强制: ${force})...`)
-
-    // 尝试记录日志和登出，给予短超时，避免卡死
-    if (!force && user && !profileError) {
-        try {
-            // 🚨 修复：显式指定数组类型为 Promise<any>[]，允许混合不同类型的 Promise
-            const tasks: Promise<any>[] = [auth.signOut()]
-            if (!profileError) tasks.push(logStudyDuration())
-            
-            // 2秒超时
-            const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000))
-            await Promise.race([Promise.all(tasks), timeoutPromise])
-        } catch (e) {
-            console.warn('登出/日志记录超时或失败:', e)
-        }
-    } else {
-        // 强制模式或已出错，只尝试登出，不记录日志
-        try { auth.signOut() } catch(e) {}
-    }
-
-    // 注意：退出时不清除进度，以便下次登录后继续学习/测试
-    // 进度会在完成学习/测试时自动清除
-
-    setUser(null)
-    setUserProfile(null)
-    setProfileError(false)
-    setAppStage('dashboard')
-    setLoading(false)
-    isFetchingProfile.current = false
-    
-    sessionStartTime.current = new Date()
-    sessionId.current = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+// ... (保留上面的代码)
+// ... 替换原有的 handleLogout 函数 ...
+const handleLogout = async (force: boolean = false) => {
+  console.log(`执行登出流程 (强制: ${force})...`)
+  
+  // 1. 立即清除无操作定时器
+  if (inactivityTimerRef.current) {
+    clearTimeout(inactivityTimerRef.current)
+    inactivityTimerRef.current = null
   }
 
-  // 注意：已移除自动登出逻辑，用户不会被自动logout
+  // 2. 强制保存学习记录 (串行等待)
+  // 只要不是强制退出且用户存在，就尝试保存，不进行 Session 预检查，不设置超时跳过
+  if (!force && user && !profileError) {
+    try {
+      console.log('正在保存学习记录...')
+      // ✅ 关键：直接 await，死等数据库响应。
+      // 这确保了在 Token 被清除前，写入请求一定已经完成了。
+      await logStudyDuration()
+      console.log('✅ 学习记录保存步骤结束')
+    } catch (error) {
+      // 即使报错（如断网），也只打印日志，然后继续执行下面的登出，防止用户退不出来
+      console.error('保存学习记录时出错:', error)
+    }
+  }
+
+  // 3. 执行登出 (清理 Session)
+  try { 
+    console.log('正在执行 Supabase 登出...')
+    await auth.signOut() 
+  } catch(e) {
+    console.error('Supabase 登出出错:', e)
+  }
+
+  // 4. 清理本地状态 (UI 重置)
+  if (typeof window !== 'undefined' && user) {
+      try {
+          localStorage.removeItem(`test_progress_${user.id}`)
+          localStorage.removeItem(`word_list_${user.id}`)
+          localStorage.removeItem(`learning_progress_${user.id}`)
+      } catch (e) { }
+  }
+
+  // 5. 重置 React 状态
+  setUser(null)
+  setUserProfile(null)
+  setProfileError(false)
+  setAppStage('dashboard')
+  setLoading(false)
+  isFetchingProfile.current = false
+  
+  // 重置会话 ID，为下一次登录做准备
+  sessionStartTime.current = new Date()
+  sessionId.current = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+}  // 注意：已移除自动登出逻辑，用户不会被自动logout
   // 用户必须手动点击退出按钮才会登出
 
   // 页面切换
