@@ -157,3 +157,4 @@ WHERE tablename = 'profiles';
 -- 如果仍然没有创建，检查 Supabase 日志中的错误信息
 
 
+

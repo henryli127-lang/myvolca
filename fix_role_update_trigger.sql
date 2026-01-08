@@ -69,3 +69,4 @@ WHERE event_object_table = 'profiles'
 -- UPDATE profiles SET role = 'parent' WHERE id = 'test-user-id' AND role = 'child';
 
 
+

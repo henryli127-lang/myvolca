@@ -160,3 +160,4 @@ ORDER BY tablename, policyname;
 -- SELECT * FROM profiles WHERE id = auth.uid();
 
 
+

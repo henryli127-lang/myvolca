@@ -87,3 +87,4 @@ SELECT * FROM pg_policies WHERE tablename = 'profiles';
 -- 检查是否有权限错误或其他问题
 
 
+

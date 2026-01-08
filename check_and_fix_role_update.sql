@@ -92,3 +92,4 @@ WHERE routine_schema = 'public'
 -- UPDATE profiles SET role = 'parent' WHERE id = 'test-user-id' AND role IS NULL;
 
 
+

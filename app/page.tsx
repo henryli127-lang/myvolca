@@ -50,9 +50,7 @@ export default function Home() {
   const [testWords, setTestWords] = useState<TestWord[]>([])
   const [sessionKey, setSessionKey] = useState<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   const sessionStartTime = useRef<Date>(new Date())
-  const sessionId = useRef<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
-  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const INACTIVITY_TIMEOUT = 10 * 60 * 1000 
+  const sessionId = useRef<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`) 
 
   const checkTestProgress = (userId: string) => {
     if (typeof window === 'undefined') return false
@@ -187,11 +185,6 @@ export default function Home() {
 
   const handleLogout = async (force: boolean = false) => {
     console.log(`执行登出流程 (强制: ${force})...`)
-    
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current)
-      inactivityTimerRef.current = null
-    }
 
     // 尝试记录日志和登出，给予短超时，避免卡死
     if (!force && user && !profileError) {
@@ -211,14 +204,8 @@ export default function Home() {
         try { auth.signOut() } catch(e) {}
     }
 
-    // 强制清理本地状态
-    if (typeof window !== 'undefined' && user) {
-        try {
-            localStorage.removeItem(`test_progress_${user.id}`)
-            localStorage.removeItem(`word_list_${user.id}`)
-            localStorage.removeItem(`learning_progress_${user.id}`)
-        } catch (e) { }
-    }
+    // 注意：退出时不清除进度，以便下次登录后继续学习/测试
+    // 进度会在完成学习/测试时自动清除
 
     setUser(null)
     setUserProfile(null)
@@ -231,31 +218,8 @@ export default function Home() {
     sessionId.current = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   }
 
-  // 重置无操作定时器
-  const resetInactivityTimer = () => {
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current)
-    }
-    if (user) {
-      inactivityTimerRef.current = setTimeout(async () => {
-        console.log('10分钟无操作，自动退出')
-        await handleLogout()
-      }, INACTIVITY_TIMEOUT)
-    }
-  }
-
-  // 监听活动
-  useEffect(() => {
-    if (!user) return
-    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click']
-    const handleActivity = () => resetInactivityTimer()
-    events.forEach(event => document.addEventListener(event, handleActivity, true))
-    resetInactivityTimer()
-    return () => {
-      events.forEach(event => document.removeEventListener(event, handleActivity, true))
-      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current)
-    }
-  }, [user])
+  // 注意：已移除自动登出逻辑，用户不会被自动logout
+  // 用户必须手动点击退出按钮才会登出
 
   // 页面切换
   useEffect(() => {
@@ -340,13 +304,8 @@ export default function Home() {
   }
 
   const handleBackToDashboard = () => {
-    if (typeof window !== 'undefined' && user) {
-      try {
-        localStorage.removeItem(`test_progress_${user.id}`)
-        localStorage.removeItem(`word_list_${user.id}`)
-        localStorage.removeItem(`learning_progress_${user.id}`)
-      } catch (error) { console.error('清除缓存失败:', error) }
-    }
+    // 注意：返回仪表板时不清除进度，以便用户可以继续学习/测试
+    // 进度会在完成学习/测试时自动清除
     setAppStage('dashboard')
     setTestResults(null)
     setTestWords([])

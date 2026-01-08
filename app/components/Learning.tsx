@@ -108,6 +108,10 @@ const loadProgress = () => {
   const learnedWordIdsRef = useRef<Set<number>>(new Set(initialProgress.wordIds))
   // ✅ 新增：用于存储本轮已学习的所有单词完整信息
   const learnedWordsRef = useRef<Word[]>(initialProgress.words || [])
+  // ✅ 新增：历史记录栈，用于回退功能
+  const historyStackRef = useRef<Word[]>([])
+  // ✅ 新增：状态来控制回退按钮的显示
+  const [canGoBack, setCanGoBack] = useState(false)
   const speechSynthesisRef = useRef<SpeechSynthesis | null>(null)
 
   // 检查语音 API 支持
@@ -182,51 +186,48 @@ const loadProgress = () => {
     const initializeWords = async () => {
       const wordListKey = `word_list_${user.id}`
       const saved = localStorage.getItem(wordListKey)
+      let wordsFromCache: Word[] = []
       
       // 检查是否有缓存
       if (saved) {
         try {
           const parsed = JSON.parse(saved)
           if (parsed.words && Array.isArray(parsed.words) && parsed.words.length > 0) {
-            // 有缓存，检查是否有未完成的单词
-            const unlearnedCount = parsed.words.filter((w: Word) => 
-              !learnedWordIdsRef.current.has(Number(w.id))
-            ).length
+            wordsFromCache = parsed.words.map((w: any) => ({
+              id: Number(w.id),
+              word: w.word,
+              translation: w.translation,
+              pos: w.pos,
+              mnemonic: w.mnemonic,
+              sentence_en: w.sentence_en,
+              sentence_cn: w.sentence_cn,
+              keywords: w.keywords,
+              is_review: w.is_review || false
+            }))
             
-            if (unlearnedCount > 0) {
+            // 检查是否有未学习的单词
+            const unlearnedWords = wordsFromCache.filter((w: Word) => 
+              !learnedWordIdsRef.current.has(Number(w.id))
+            )
+            
+            if (unlearnedWords.length > 0) {
               // 有未完成的单词，使用缓存
-              console.log(`从缓存恢复学习，还有 ${unlearnedCount} 个单词未学习`)
-              const nextWord = getNextWordFromCache()
-              if (nextWord) {
-                // ✅ 确保单词对象包含所有字段
-                const wordData: Word = {
-                  id: Number(nextWord.id),
-                  word: nextWord.word,
-                  translation: nextWord.translation,
-                  pos: nextWord.pos,
-                  mnemonic: nextWord.mnemonic,
-                  sentence_en: nextWord.sentence_en,
-                  sentence_cn: nextWord.sentence_cn,
-                  keywords: nextWord.keywords,
-                  is_review: nextWord.is_review || false
-                }
-                setWord(wordData)
-                setLoading(false)
-                return
-              }
+              console.log(`从缓存恢复学习，还有 ${unlearnedWords.length} 个单词未学习`)
+              setWord(unlearnedWords[0])
+              setLoading(false)
+              return
             } else {
-              // 缓存中的单词都已学习，需要获取新的
-              console.log('缓存中的单词都已学习，获取新单词')
-              localStorage.removeItem(wordListKey)
+              // 缓存中的单词都已学习，需要补充新单词
+              console.log('缓存中的单词都已学习，需要补充新单词')
             }
           }
         } catch (error) {
           console.error('解析缓存失败:', error)
-          localStorage.removeItem(wordListKey)
+          wordsFromCache = []
         }
       }
       
-      // 没有缓存或缓存无效，计算需要获取的单词数量
+      // 计算需要获取的单词数量
       const remainingCount = TARGET_WORDS - learnedCount
       if (remainingCount <= 0) {
         console.log('已完成所有学习目标')
@@ -234,43 +235,47 @@ const loadProgress = () => {
         return
       }
       
-      // 一次性获取所需数量的新单词
-      console.log(`开始新的学习会话，获取 ${remainingCount} 个新单词`)
-      setLoading(true)
-      
-      const { data, error } = await words.getNewWordsBatch(user.id, remainingCount)
-      
-      if (error || !data || data.length === 0) {
-        console.error('获取学习单词失败:', error)
-        setLoading(false)
-        return
-      }
-      
-      // 保存到缓存（确保所有字段都被保留）
-      const wordsToCache = data.map((w: any) => {
-        const word: Word = {
-          id: Number(w.id),
-          word: w.word,
-          translation: w.translation,
-          pos: w.pos,
-          mnemonic: w.mnemonic,
-          sentence_en: w.sentence_en,
-          sentence_cn: w.sentence_cn,
-          keywords: w.keywords,
-          is_review: w.is_review || false
+      // 如果缓存中没有未学习的单词，需要获取新单词
+      if (wordsFromCache.filter((w: Word) => !learnedWordIdsRef.current.has(Number(w.id))).length === 0) {
+        console.log(`开始新的学习会话，获取 ${remainingCount} 个新单词`)
+        setLoading(true)
+        
+        const { data, error } = await words.getNewWordsBatch(user.id, remainingCount)
+        
+        if (error || !data || data.length === 0) {
+          console.error('获取学习单词失败:', error)
+          setLoading(false)
+          return
         }
-        return word
-      })
-      
-      
-      localStorage.setItem(wordListKey, JSON.stringify({
-        words: wordsToCache,
-        timestamp: Date.now()
-      }))
-      
-      // 显示第一个单词
-      if (wordsToCache.length > 0) {
-        setWord(wordsToCache[0])
+        
+        // 保存到缓存（确保所有字段都被保留）
+        const wordsToCache = data.map((w: any) => {
+          const word: Word = {
+            id: Number(w.id),
+            word: w.word,
+            translation: w.translation,
+            pos: w.pos,
+            mnemonic: w.mnemonic,
+            sentence_en: w.sentence_en,
+            sentence_cn: w.sentence_cn,
+            keywords: w.keywords,
+            is_review: w.is_review || false
+          }
+          return word
+        })
+        
+        // 合并缓存和新单词（如果有缓存）
+        const allWords = [...wordsFromCache, ...wordsToCache]
+        localStorage.setItem(wordListKey, JSON.stringify({
+          words: allWords,
+          timestamp: Date.now()
+        }))
+        
+        // 显示第一个未学习的单词
+        const firstUnlearned = allWords.find((w: Word) => !learnedWordIdsRef.current.has(Number(w.id)))
+        if (firstUnlearned) {
+          setWord(firstUnlearned)
+        }
       }
       
       setLoading(false)
@@ -290,6 +295,57 @@ const loadProgress = () => {
       console.warn('缓存中没有更多未学习的单词')
     }
   }, [getNextWordFromCache])
+
+  // 回退到上一个单词
+  const handleGoBack = () => {
+    if (historyStackRef.current.length === 0) {
+      // 没有历史记录，无法回退
+      return
+    }
+
+    // 从历史记录中取出上一个单词
+    const lastWord = historyStackRef.current.pop()
+    if (!lastWord) return
+
+    // 更新回退按钮状态
+    setCanGoBack(historyStackRef.current.length > 0)
+
+    // 从已学习列表中移除
+    learnedWordIdsRef.current.delete(lastWord.id)
+    learnedWordsRef.current = learnedWordsRef.current.filter(w => w.id !== lastWord.id)
+    
+    // 减少计数
+    const newCount = Math.max(0, learnedCount - 1)
+    setLearnedCount(newCount)
+    
+    // 保存进度
+    saveProgress(newCount, learnedWordsRef.current)
+    
+    // 将单词重新添加到 word_list 的开头
+    const wordListKey = `word_list_${user.id}`
+    const saved = localStorage.getItem(wordListKey)
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        if (parsed.words && Array.isArray(parsed.words)) {
+          // 先从列表中移除该单词（如果存在）
+          const filteredWords = parsed.words.filter((w: Word) => w.id !== lastWord.id)
+          // 将单词添加到列表开头
+          filteredWords.unshift(lastWord)
+          localStorage.setItem(wordListKey, JSON.stringify({
+            words: filteredWords,
+            timestamp: Date.now()
+          }))
+        }
+      } catch (error) {
+        console.error('更新 word_list 失败:', error)
+      }
+    }
+    
+    // 显示上一个单词
+    setWord(lastWord)
+    setIsFlipped(false)
+  }
 
   // 语音朗读函数
   /*const playAudio = useCallback((text: string) => {
@@ -572,6 +628,11 @@ const loadProgress = () => {
         currentReviewCount
       )
 
+      // ✅ 新增：保存到历史记录栈，用于回退功能
+      historyStackRef.current.push(word)
+      // 更新回退按钮状态
+      setCanGoBack(true)
+
       // 1. 更新状态
       learnedWordIdsRef.current.add(word.id)
       // ✅ 新增：把当前学完的这个单词加入列表
@@ -629,9 +690,82 @@ const loadProgress = () => {
     // 确保当前进度已保存（如果用户在学习过程中退出）
     if (learnedCount > 0 && learnedWordIdsRef.current.size > 0) {
         saveProgress(learnedCount, learnedWordsRef.current)
+        // 同时保存 word_list，以便测试时使用
+        const wordListKey = `word_list_${user.id}`
+        const saved = localStorage.getItem(wordListKey)
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved)
+            if (parsed.words && Array.isArray(parsed.words)) {
+              // 更新 word_list，保留未学习的单词
+              const unlearnedWords = parsed.words.filter((w: Word) => 
+                !learnedWordIdsRef.current.has(Number(w.id))
+              )
+              if (unlearnedWords.length > 0) {
+                localStorage.setItem(wordListKey, JSON.stringify({
+                  words: unlearnedWords,
+                  timestamp: Date.now()
+                }))
+              }
+            }
+          } catch (error) {
+            console.error('更新 word_list 失败:', error)
+          }
+        }
     }
     onLogout()
   }
+
+  // 页面关闭前保存进度
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // 使用 ref 获取最新值，因为 beforeunload 事件可能在状态更新前触发
+      const currentCount = learnedCount
+      const currentWords = learnedWordsRef.current
+      const currentWordIds = learnedWordIdsRef.current
+      
+      if (currentCount > 0 && currentWordIds.size > 0) {
+        saveProgress(currentCount, currentWords)
+        // 同时更新 word_list
+        const wordListKey = `word_list_${user.id}`
+        const saved = localStorage.getItem(wordListKey)
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved)
+            if (parsed.words && Array.isArray(parsed.words)) {
+              const unlearnedWords = parsed.words.filter((w: Word) => 
+                !currentWordIds.has(Number(w.id))
+              )
+              if (unlearnedWords.length > 0) {
+                localStorage.setItem(wordListKey, JSON.stringify({
+                  words: unlearnedWords,
+                  timestamp: Date.now()
+                }))
+              }
+            }
+          } catch (error) {
+            console.error('更新 word_list 失败:', error)
+          }
+        }
+      }
+    }
+    
+    // 监听页面关闭事件
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    
+    return () => {
+      // 组件卸载时也保存进度
+      const currentCount = learnedCount
+      const currentWords = learnedWordsRef.current
+      const currentWordIds = learnedWordIdsRef.current
+      
+      if (currentCount > 0 && currentWordIds.size > 0) {
+        saveProgress(currentCount, currentWords)
+      }
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // 只在组件挂载时设置监听器，使用 ref 访问最新值
 
 
 
@@ -837,7 +971,19 @@ const loadProgress = () => {
         </div>
 
         {/* 操作按钮 */}
-        <div className="flex gap-4 justify-center">
+        <div className="flex gap-4 justify-center items-center">
+          {/* 回退按钮 - 只在有历史记录时显示 */}
+          {canGoBack && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleGoBack}
+              className="bg-gray-500 text-white font-bold py-4 px-6 rounded-2xl shadow-xl hover:shadow-2xl transform transition-all text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              title="回退到上一个单词"
+            >
+              ⬅️ 回退
+            </motion.button>
+          )}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
