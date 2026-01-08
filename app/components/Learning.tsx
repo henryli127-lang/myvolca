@@ -606,7 +606,7 @@ const loadProgress = () => {
         lastPlayedWordRef.current = null
       }
     }
-  }, [word?.word, isFlipped]) // 只依赖 word.word 和 isFlipped，不依赖 playAudio
+  }, [word?.word, isFlipped, playAudio]) // 包含 playAudio 依赖项
 
 
   const handleCardClick = () => {
@@ -720,9 +720,9 @@ const loadProgress = () => {
   useEffect(() => {
     const handleBeforeUnload = () => {
       // 使用 ref 获取最新值，因为 beforeunload 事件可能在状态更新前触发
-      const currentCount = learnedCount
       const currentWords = learnedWordsRef.current
       const currentWordIds = learnedWordIdsRef.current
+      const currentCount = learnedWordsRef.current.length
       
       if (currentCount > 0 && currentWordIds.size > 0) {
         saveProgress(currentCount, currentWords)
@@ -751,18 +751,22 @@ const loadProgress = () => {
     }
     
     // 监听页面关闭事件
-    window.addEventListener('beforeunload', handleBeforeUnload)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', handleBeforeUnload)
+    }
     
     return () => {
       // 组件卸载时也保存进度
-      const currentCount = learnedCount
       const currentWords = learnedWordsRef.current
       const currentWordIds = learnedWordIdsRef.current
+      const currentCount = learnedWordsRef.current.length
       
       if (currentCount > 0 && currentWordIds.size > 0) {
         saveProgress(currentCount, currentWords)
       }
-      window.removeEventListener('beforeunload', handleBeforeUnload)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('beforeunload', handleBeforeUnload)
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // 只在组件挂载时设置监听器，使用 ref 访问最新值
