@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { profiles, words } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
+import WordHistoryModal from './WordHistoryModal'
 
 interface StudentDashboardProps {
   user: User
@@ -17,6 +18,7 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
   const [masteredCount, setMasteredCount] = useState(0)
   const [welcomeMessage, setWelcomeMessage] = useState('')
   const [loading, setLoading] = useState(true)
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -122,8 +124,23 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20 p-6 font-quicksand">
-      {/* 退出按钮 */}
-      <div className="absolute top-4 right-4 z-10">
+      {/* 顶部按钮区域 */}
+      <div className="absolute top-4 right-4 z-10 flex items-center gap-3">
+        {/* 查看单词明细按钮 */}
+        <motion.button
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setIsHistoryOpen(true)}
+          className="bg-white/80 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
+        >
+          <span>📅</span>
+          <span className="font-semibold">查看单词明细</span>
+        </motion.button>
+        
+        {/* 退出按钮 */}
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
@@ -215,6 +232,14 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
           </motion.button>
         </motion.div>
       </div>
+
+      {/* 单词明细模态框 */}
+      <WordHistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        userId={user.id}
+        title={`${userProfile?.email?.split('@')[0] || '我的'}的单词本`}
+      />
     </div>
   )
 }
