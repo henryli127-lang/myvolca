@@ -122,9 +122,9 @@ export default function StorySpark({ testWords, onBack, onLogout }: StorySparkPr
           // 验证 testWords 是否匹配（允许部分匹配）
           if (parsed.testWords && Array.isArray(parsed.testWords) && parsed.testWords.length > 0) {
             // 检查是否有重叠的单词
-            const savedWords = new Set(parsed.testWords.map((w: any) => w.word?.toLowerCase()))
-            const currentWords = new Set(testWords.map(w => w.word.toLowerCase()))
-            const hasOverlap = Array.from(savedWords).some(w => currentWords.has(w))
+            const savedWords = new Set<string>(parsed.testWords.map((w: any) => (w.word?.toLowerCase() || '').toString()))
+            const currentWords = new Set<string>(testWords.map(w => w.word.toLowerCase()))
+            const hasOverlap = Array.from(savedWords).some((w: string) => currentWords.has(w))
             
             if (hasOverlap || parsed.testWords.length === testWords.length) {
               if (parsed.selectedCharacter) {
