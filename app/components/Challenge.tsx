@@ -324,7 +324,17 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
             const data = await response.json()
             if (data.options && Array.isArray(data.options)) {
               // 将选项合并到单词中
-              const optionsMap = new Map(data.options.map((opt: any) => [opt.word, opt]))
+              interface OptionData {
+                word: string
+                translation: string
+                translationOptions: string[]
+                translationCorrectIndex: number
+                spellingOptions: string[]
+                spellingCorrectIndex: number
+              }
+              const optionsMap = new Map<string, OptionData>(
+                data.options.map((opt: OptionData) => [opt.word, opt])
+              )
               finalWords = finalWords.map(w => {
                 const options = optionsMap.get(w.word)
                 if (options) {
