@@ -9,9 +9,10 @@ import StudentDashboard from './components/StudentDashboard'
 import Learning from './components/Learning'
 import Challenge from './components/Challenge'
 import ReportCard from './components/ReportCard'
+import StorySpark from './components/StorySpark'
 import type { User } from '@supabase/supabase-js'
 
-type AppStage = 'dashboard' | 'learning' | 'challenge' | 'report' | 'transition'
+type AppStage = 'dashboard' | 'learning' | 'challenge' | 'report' | 'storyspark' | 'transition'
 
 interface TestResults {
   translationCorrect: number
@@ -333,6 +334,22 @@ const handleLogout = async (force: boolean = false) => {
     setSessionKey(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   }
 
+  // 监听 StorySpark 打开事件
+  useEffect(() => {
+    const handleOpenStorySpark = (event: CustomEvent) => {
+      const { testWords: words } = event.detail
+      if (words && words.length > 0) {
+        setTestWords(words)
+        setAppStage('storyspark')
+      }
+    }
+
+    window.addEventListener('openStorySpark', handleOpenStorySpark as EventListener)
+    return () => {
+      window.removeEventListener('openStorySpark', handleOpenStorySpark as EventListener)
+    }
+  }, [])
+
   // ==========================================
   // 渲染层
   // ==========================================
@@ -449,6 +466,16 @@ const handleLogout = async (force: boolean = false) => {
             <ReportCard
               user={user}
               results={testResults}
+              testWords={testWords}
+              onBack={handleBackToDashboard}
+              onLogout={() => handleLogout()}
+            />
+          </motion.div>
+        )}
+
+        {appStage === 'storyspark' && testWords.length > 0 && (
+          <motion.div key="storyspark" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
+            <StorySpark
               testWords={testWords}
               onBack={handleBackToDashboard}
               onLogout={() => handleLogout()}

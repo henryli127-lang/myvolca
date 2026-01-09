@@ -159,8 +159,20 @@ export default function ReportCard({ user, results, testWords, onBack, onLogout 
             </motion.div>
           </div>
 
-          {/* 返回按钮 */}
-          <div className="text-center">
+          {/* 操作按钮 */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                // 通过自定义事件传递 testWords 数据
+                const event = new CustomEvent('openStorySpark', { detail: { testWords } })
+                window.dispatchEvent(event)
+              }}
+              className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transform transition-all text-lg"
+            >
+              📚 趣味阅读
+            </motion.button>
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
