@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { SelectionItem, QuizQuestion, StoryState, GenerationStatus } from '../types/storyspark'
 import { Volume2, VolumeX } from 'lucide-react'
@@ -83,6 +83,109 @@ export default function StorySpark({ testWords, onBack, onLogout }: StorySparkPr
   const [story, setStory] = useState<StoryState | null>(null)
   const [status, setStatus] = useState<GenerationStatus>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [hasRestoredProgress, setHasRestoredProgress] = useState(false)
+
+  // 保存阅读状态到 localStorage
+  const saveReadingProgress = useCallback(() => {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const progress = {
+        selectedCharacter,
+        selectedSetting,
+        story,
+        status,
+        testWords,
+        timestamp: Date.now()
+      }
+      localStorage.setItem('reading_progress', JSON.stringify(progress))
+    } catch (error) {
+      console.error('保存阅读进度失败:', error)
+    }
+  }, [selectedCharacter, selectedSetting, story, status, testWords])
+
+  // 恢复阅读状态
+  useEffect(() => {
+    if (hasRestoredProgress) return
+    
+    if (typeof window === 'undefined') {
+      setHasRestoredProgress(true)
+      return
+    }
+    
+    try {
+      const saved = localStorage.getItem('reading_progress')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        // 检查时间戳（24小时内有效）
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+          // 验证 testWords 是否匹配（允许部分匹配）
+          if (parsed.testWords && Array.isArray(parsed.testWords) && parsed.testWords.length > 0) {
+            // 检查是否有重叠的单词
+            const savedWords = new Set(parsed.testWords.map((w: any) => w.word?.toLowerCase()))
+            const currentWords = new Set(testWords.map(w => w.word.toLowerCase()))
+            const hasOverlap = Array.from(savedWords).some(w => currentWords.has(w))
+            
+            if (hasOverlap || parsed.testWords.length === testWords.length) {
+              if (parsed.selectedCharacter) {
+                setSelectedCharacter(parsed.selectedCharacter)
+              }
+              if (parsed.selectedSetting) {
+                setSelectedSetting(parsed.selectedSetting)
+              }
+              if (parsed.story) {
+                setStory(parsed.story)
+              }
+              if (parsed.status) {
+                setStatus(parsed.status)
+              }
+              
+              console.log('已恢复阅读进度')
+            } else {
+              // testWords 不匹配，清除旧进度
+              localStorage.removeItem('reading_progress')
+            }
+          } else {
+            // 没有 testWords，清除旧进度
+            localStorage.removeItem('reading_progress')
+          }
+        } else {
+          // 超过24小时，清除旧进度
+          localStorage.removeItem('reading_progress')
+        }
+      }
+    } catch (error) {
+      console.error('恢复阅读进度失败:', error)
+      localStorage.removeItem('reading_progress')
+    } finally {
+      setHasRestoredProgress(true)
+    }
+  }, [testWords, hasRestoredProgress])
+
+  // 当状态改变时保存进度
+  useEffect(() => {
+    if (hasRestoredProgress) {
+      saveReadingProgress()
+    }
+  }, [selectedCharacter, selectedSetting, story, status, saveReadingProgress, hasRestoredProgress])
+
+  // 页面关闭前保存进度
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      saveReadingProgress()
+    }
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', handleBeforeUnload)
+    }
+    
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('beforeunload', handleBeforeUnload)
+        saveReadingProgress()
+      }
+    }
+  }, [saveReadingProgress])
 
   const handleGenerate = async () => {
     if (!selectedCharacter || !selectedSetting) return
@@ -128,6 +231,15 @@ export default function StorySpark({ testWords, onBack, onLogout }: StorySparkPr
     setStory(null)
     setStatus('idle')
     setErrorMsg(null)
+    // 清除保存的进度
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('reading_progress')
+    }
+  }
+
+  const handleBack = () => {
+    // 返回时不清除进度，允许用户稍后继续
+    onBack()
   }
 
   const isSelectionComplete = !!selectedCharacter && !!selectedSetting
@@ -139,7 +251,7 @@ export default function StorySpark({ testWords, onBack, onLogout }: StorySparkPr
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={onBack}
+          onClick={handleBack}
           className="bg-white/80 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
         >
           <span>🏠</span>
@@ -170,7 +282,7 @@ export default function StorySpark({ testWords, onBack, onLogout }: StorySparkPr
         </motion.div>
 
         {status === 'success' && story ? (
-          <StoryDisplay story={story} onReset={handleReset} />
+          <StoryDisplay story={story} testWords={testWords} onReset={handleReset} />
         ) : (
           <div className="space-y-8">
             {/* 角色选择 */}
@@ -325,10 +437,152 @@ function SelectionCard({ item, isSelected, onSelect }: {
 }
 
 // StoryDisplay 组件
-function StoryDisplay({ story, onReset }: { story: StoryState; onReset: () => void }) {
+function StoryDisplay({ 
+  story, 
+  testWords, 
+  onReset 
+}: { 
+  story: StoryState
+  testWords: Array<{ id: number; word: string; translation: string }>
+  onReset: () => void 
+}) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [selectedWord, setSelectedWord] = useState<{ word: string; translation: string; x: number; y: number } | null>(null)
+
+  // 创建单词到翻译的映射（支持多种形式）
+  const wordMap = useRef(new Map<string, string>())
+  
+  // 创建单词到翻译的映射（支持多种形式）
+  useEffect(() => {
+    wordMap.current.clear()
+    if (testWords && testWords.length > 0) {
+      testWords.forEach(w => {
+        const wordLower = w.word.toLowerCase().trim()
+        if (wordLower.length > 0) {
+          wordMap.current.set(wordLower, w.translation)
+          // 支持常见的变化形式
+          // 复数形式
+          if (wordLower.endsWith('s')) {
+            wordMap.current.set(wordLower.slice(0, -1), w.translation)
+          } else if (!wordLower.endsWith('ss') && !wordLower.endsWith('us') && !wordLower.endsWith('is')) {
+            wordMap.current.set(wordLower + 's', w.translation)
+          }
+          // 过去式（简单处理）
+          if (wordLower.endsWith('ed')) {
+            wordMap.current.set(wordLower.slice(0, -2), w.translation)
+            wordMap.current.set(wordLower.slice(0, -1), w.translation)
+          }
+          // 进行时
+          if (wordLower.endsWith('ing')) {
+            wordMap.current.set(wordLower.slice(0, -3), w.translation)
+            const base = wordLower.slice(0, -3)
+            if (!base.endsWith('e')) {
+              wordMap.current.set(base + 'e', w.translation)
+            }
+          }
+        }
+      })
+    }
+  }, [testWords])
+
+  // 查询单词翻译（从数据库）
+  const lookupWordTranslation = useCallback(async (word: string): Promise<string | null> => {
+    try {
+      const response = await fetch(`/api/word-lookup?word=${encodeURIComponent(word)}`)
+      if (response.ok) {
+        const data = await response.json()
+        return data.translation || null
+      }
+      return null
+    } catch (error) {
+      console.error('查询单词翻译失败:', error)
+      return null
+    }
+  }, [])
+
+  // 高亮并处理点击单词
+  const processTextWithHighlights = useCallback((text: string) => {
+    if (!text) return null
+    
+    // 使用正则表达式匹配所有单词
+    const wordRegex = /\b\w+\b/g
+    const parts: Array<{ text: string; isWord: boolean }> = []
+    let lastIndex = 0
+    let match
+    
+    while ((match = wordRegex.exec(text)) !== null) {
+      // 添加单词前的非单词字符
+      if (match.index > lastIndex) {
+        parts.push({ text: text.substring(lastIndex, match.index), isWord: false })
+      }
+      // 添加单词
+      parts.push({ text: match[0], isWord: true })
+      lastIndex = match.index + match[0].length
+    }
+    
+    // 添加剩余的文本
+    if (lastIndex < text.length) {
+      parts.push({ text: text.substring(lastIndex), isWord: false })
+    }
+    
+    // 如果没有匹配到单词，直接返回原文本
+    if (parts.length === 0) {
+      return <span>{text}</span>
+    }
+    
+    return parts.map((part, index) => {
+      if (!part.isWord) {
+        return <span key={index}>{part.text}</span>
+      }
+      
+      // 是单词，检查是否是新学单词
+      const wordLower = part.text.toLowerCase().trim()
+      const isNewWord = wordMap.current.has(wordLower)
+      const translation = isNewWord ? wordMap.current.get(wordLower) : null
+      
+      return (
+        <span
+          key={`word-${index}-${part.text}`}
+          onClick={async (e) => {
+            e.stopPropagation()
+            const rect = e.currentTarget.getBoundingClientRect()
+            let finalTranslation = translation
+            
+            // 如果不是新学单词，尝试查询翻译
+            if (!finalTranslation) {
+              finalTranslation = await lookupWordTranslation(part.text)
+            }
+            
+            // 计算弹窗位置，确保在视口内
+            const x = Math.min(
+              Math.max(rect.left + rect.width / 2, 150),
+              window.innerWidth - 150
+            )
+            const y = Math.max(rect.top - 10, 50)
+            
+            setSelectedWord({
+              word: part.text,
+              translation: finalTranslation || '暂无翻译',
+              x,
+              y
+            })
+          }}
+          className={`
+            cursor-pointer rounded px-1 transition-colors inline-block
+            ${isNewWord
+              ? 'bg-yellow-200 hover:bg-yellow-300 font-semibold'
+              : 'hover:bg-gray-100'
+            }
+          `}
+          title={translation || '点击查看翻译'}
+        >
+          {part.text}
+        </span>
+      )
+    })
+  }, [lookupWordTranslation])
 
   const playAudio = useCallback(async () => {
     // 如果正在播放，暂停
@@ -516,14 +770,51 @@ function StoryDisplay({ story, onReset }: { story: StoryState; onReset: () => vo
             </motion.button>
           </div>
           <div className="prose prose-lg max-w-none">
-            {story.content.split('\n').map((paragraph, idx) => (
-              paragraph.trim() && (
+            {story.content.split('\n').map((paragraph, idx) => {
+              if (!paragraph.trim()) return null
+              const highlighted = processTextWithHighlights(paragraph.trim())
+              if (!highlighted) return null
+              return (
                 <p key={idx} className="mb-4 leading-relaxed text-gray-700 text-lg">
-                  {paragraph}
+                  {highlighted}
                 </p>
               )
-            ))}
+            })}
           </div>
+
+          {/* 单词翻译弹窗 */}
+          {selectedWord && (
+            <>
+              <div
+                className="fixed inset-0 z-50"
+                onClick={() => setSelectedWord(null)}
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.8, y: -10 }}
+                className="fixed z-50 bg-white rounded-xl shadow-2xl border-4 border-candy-blue p-4 min-w-[200px] max-w-xs"
+                style={{
+                  left: `${selectedWord.x}px`,
+                  top: `${selectedWord.y}px`,
+                  transform: 'translate(-50%, -100%)',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-candy-blue mb-2 break-words">
+                    {selectedWord.word}
+                  </p>
+                  <p className="text-lg text-gray-700 break-words">
+                    {selectedWord.translation}
+                  </p>
+                </div>
+                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full">
+                  <div className="w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-candy-blue" />
+                </div>
+              </motion.div>
+            </>
+          )}
 
           <div className="mt-8 text-center mb-4">
             <p className="text-sm text-gray-500 italic">

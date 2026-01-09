@@ -74,6 +74,30 @@ export default function Home() {
     return false
   }
 
+  const checkReadingProgress = (userId: string) => {
+    if (typeof window === 'undefined') return null
+    try {
+      const saved = localStorage.getItem('reading_progress')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        // 检查时间戳（24小时内有效）
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+          // 验证是否有 testWords
+          if (parsed.testWords && Array.isArray(parsed.testWords) && parsed.testWords.length > 0) {
+            return parsed
+          }
+        } else {
+          // 超过24小时，清除旧进度
+          localStorage.removeItem('reading_progress')
+        }
+      }
+    } catch (error) {
+      console.error('检查阅读进度失败:', error)
+      localStorage.removeItem('reading_progress')
+    }
+    return null
+  }
+
   // ==========================================
   // 1. 认证监听 (只负责设置 User)
   // ==========================================
@@ -148,7 +172,17 @@ export default function Home() {
 
           // 路由跳转逻辑
           if (profile.role === 'child') {
-            if (checkTestProgress(user.id)) {
+            // 优先检查阅读进度
+            const readingProgress = checkReadingProgress(user.id)
+            if (readingProgress) {
+              // 恢复阅读状态
+              setTestWords(readingProgress.testWords.map((w: any) => ({
+                id: w.id || 0,
+                word: w.word,
+                translation: w.translation
+              })))
+              setAppStage('storyspark')
+            } else if (checkTestProgress(user.id)) {
               setAppStage('challenge')
             } else {
               setAppStage('dashboard')
@@ -326,11 +360,12 @@ const handleLogout = async (force: boolean = false) => {
   }
 
   const handleBackToDashboard = () => {
-    // 注意：返回仪表板时不清除进度，以便用户可以继续学习/测试
+    // 注意：返回仪表板时不清除进度，以便用户可以继续学习/测试/阅读
     // 进度会在完成学习/测试时自动清除
     setAppStage('dashboard')
     setTestResults(null)
-    setTestWords([])
+    // 不清除 testWords，因为可能还有阅读进度需要恢复
+    // setTestWords([])
     setSessionKey(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   }
 
@@ -473,10 +508,10 @@ const handleLogout = async (force: boolean = false) => {
           </motion.div>
         )}
 
-        {appStage === 'storyspark' && testWords.length > 0 && (
+        {appStage === 'storyspark' && (
           <motion.div key="storyspark" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
             <StorySpark
-              testWords={testWords}
+              testWords={testWords.length > 0 ? testWords : []}
               onBack={handleBackToDashboard}
               onLogout={() => handleLogout()}
             />

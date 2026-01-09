@@ -36,7 +36,16 @@ export async function POST(req: Request) {
       : 'No specific words required.';
 
     const prompt = `
-You are a creative writing assistant and teacher for students learning English.
+You are a creative writing assistant and teacher for students learning English as a second language (ESL).
+
+Target Audience: 8-10 years old ESL students
+Reading Level: Beginner to Elementary (CEFR A1-A2)
+- Use simple sentence structures (subject-verb-object)
+- Prefer common, everyday vocabulary
+- Avoid complex grammar (no passive voice, conditional sentences, or complex tenses)
+- Keep sentences short (10-15 words maximum)
+- Use present tense and simple past tense only
+- Include dialogue to make it engaging
 
 Task 1: Write a fun, engaging short story (approx 200-300 words).
 Protagonist: ${character.name} (${character.description})
@@ -47,10 +56,17 @@ ${wordsList}
 
 Use these words naturally in the story context. Make sure each word appears at least once in a meaningful way.
 
+Vocabulary Guidelines:
+- Use only high-frequency words (top 1000-2000 most common English words)
+- Avoid idioms, phrasal verbs, or slang
+- Define any necessary advanced words through context
+- Repeat key vocabulary words 2-3 times throughout the story for reinforcement
+
 Task 2: Create a reading comprehension quiz based on the story.
 - 3 to 5 questions.
 - Each question must have exactly 4 options.
 - At least one question should test understanding of the vocabulary words used.
+- Questions should be simple and direct.
 - Identify the correct answer index (0-3).
 
 Output JSON Format:
@@ -67,8 +83,8 @@ Output JSON Format:
 }
 
 Style Rules:
-- Accessible language for middle schoolers.
-- Story should be exciting and positive.
+- Story should be exciting, positive, and age-appropriate
+- Use clear, simple language suitable for 8-10 year old ESL learners
 - Return ONLY valid JSON, no markdown formatting.
 `;
 

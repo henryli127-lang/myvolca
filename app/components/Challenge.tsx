@@ -11,6 +11,10 @@ interface Word {
   translation: string
   keywords?: string[]
   is_review?: boolean
+  translationOptions?: string[]
+  translationCorrectIndex?: number
+  spellingOptions?: string[]
+  spellingCorrectIndex?: number
 }
 
 interface TestResults {
@@ -148,6 +152,8 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
   const [mustTypeCorrect, setMustTypeCorrect] = useState(false)
   const [hasRestoredProgress, setHasRestoredProgress] = useState(!!savedProgress)
   const [showStartMessage, setShowStartMessage] = useState(true)
+  const [selectedOptionIndex, setSelectedOptionIndex] = useState<number>(-1)
+  const [loadingOptions, setLoadingOptions] = useState(false)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -298,6 +304,48 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
           finalWords = wordsList
         }
         
+        // 4. 生成选择题选项
+        setLoadingOptions(true)
+        try {
+          const response = await fetch('/api/test-options', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              words: finalWords.map(w => ({
+                word: w.word,
+                translation: w.translation
+              }))
+            }),
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            if (data.options && Array.isArray(data.options)) {
+              // 将选项合并到单词中
+              const optionsMap = new Map(data.options.map((opt: any) => [opt.word, opt]))
+              finalWords = finalWords.map(w => {
+                const options = optionsMap.get(w.word)
+                if (options) {
+                  return {
+                    ...w,
+                    translationOptions: options.translationOptions,
+                    translationCorrectIndex: options.translationCorrectIndex,
+                    spellingOptions: options.spellingOptions,
+                    spellingCorrectIndex: options.spellingCorrectIndex
+                  }
+                }
+                return w
+              })
+            }
+          }
+        } catch (error) {
+          console.error('生成选择题选项失败:', error)
+        } finally {
+          setLoadingOptions(false)
+        }
+        
         setTestWords(finalWords)
         setResults(prev => ({
           ...prev,
@@ -315,6 +363,7 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
     latestResults?: TestResults, 
     latestWordResults?: Map<number, WordResult>
   ) => {
+    setSelectedOptionIndex(-1) // 重置选择
     // 优先使用传入的最新数据，否则降级使用 state (处理普通点击翻页的情况)
     const currentResults = latestResults || results
     const currentWordResults = latestWordResults || wordResults
@@ -323,19 +372,16 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
 
     if (currentIndex < testWords.length - 1) {
       setCurrentIndex(prev => prev + 1)
-      setUserInput('')
       setShowAnswer(false)
       setIsCorrect(false)
-      setMustTypeCorrect(false)
-      // 稍微延迟聚焦，防止视觉跳变
-      setTimeout(() => inputRef.current?.focus(), 50)
+      setSelectedOptionIndex(-1)
     } else {
       if (testPhase === 'translation') {
         setTestPhase('spelling')
         setCurrentIndex(0)
-        setUserInput('')
         setShowAnswer(false)
         setIsCorrect(false)
+        setSelectedOptionIndex(-1)
         if (testWords[0]) setSpellingHint(generateSpellingHint(testWords[0].word))
       } else {
         // 完成测试
@@ -372,9 +418,9 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
   const handleTranslationSubmit = () => {
     if (!testWords[currentIndex]) return
     
-    // 检查输入是否为空
-    if (!userInput.trim()) {
-      // 空输入直接判定为错误
+    // 检查是否选择了选项
+    if (selectedOptionIndex === -1) {
+      // 未选择直接判定为错误
       const wordId = testWords[currentIndex].id
       const newWordResults = new Map(wordResults)
       const existing = newWordResults.get(wordId) || { translationError: false, spellingError: false }
@@ -393,8 +439,10 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
     
     lastSubmissionTime.current = Date.now()
 
-    const correct = checkTranslation(userInput, testWords[currentIndex])
-    const wordId = testWords[currentIndex].id
+    const currentWord = testWords[currentIndex]
+    const correct = currentWord.translationCorrectIndex !== undefined && 
+                    selectedOptionIndex === currentWord.translationCorrectIndex
+    const wordId = currentWord.id
   
     const newWordResults = new Map(wordResults)
     const existing = newWordResults.get(wordId) || { translationError: false, spellingError: false }
@@ -413,10 +461,32 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
 
   const handleSpellingSubmit = () => {
     if (!testWords[currentIndex]) return
+    
+    // 检查是否选择了选项
+    if (selectedOptionIndex === -1) {
+      // 未选择直接判定为错误
+      const wordId = testWords[currentIndex].id
+      const newWordResults = new Map(wordResults)
+      const existing = newWordResults.get(wordId) || { translationError: false, spellingError: false }
+      newWordResults.set(wordId, { ...existing, spellingError: true })
+      
+      const newResults = { ...results }
+      newResults.spellingErrors += 1
+      
+      setIsCorrect(false)
+      setShowAnswer(true)
+      setWordResults(newWordResults)
+      setResults(newResults)
+      saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults)
+      return
+    }
+    
     lastSubmissionTime.current = Date.now()
 
-    const correct = userInput.trim().toLowerCase() === testWords[currentIndex].word.toLowerCase()
-    const wordId = testWords[currentIndex].id
+    const currentWord = testWords[currentIndex]
+    const correct = currentWord.spellingCorrectIndex !== undefined && 
+                    selectedOptionIndex === currentWord.spellingCorrectIndex
+    const wordId = currentWord.id
     
     const newWordResults = new Map(wordResults)
     const existing = newWordResults.get(wordId) || { translationError: false, spellingError: false }
@@ -424,7 +494,6 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
 
     if (correct) {
       setIsCorrect(true)
-      setMustTypeCorrect(false)
       // 保持之前的拼写错误记录
       newWordResults.set(wordId, { ...existing, spellingError: existing.spellingError })
       newResults.spellingCorrect += 1
@@ -441,7 +510,6 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
     } else {
       setIsCorrect(false)
       setShowAnswer(true)
-      setMustTypeCorrect(true)
       newWordResults.set(wordId, { ...existing, spellingError: true })
       newResults.spellingErrors += 1
 
@@ -449,51 +517,12 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
       setResults(newResults)
       saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults)
       
-      playAudio(testWords[currentIndex].word, 'en')
-      setUserInput('')
-      setTimeout(() => inputRef.current?.focus(), 100)
+      playAudio(currentWord.word, 'en')
+      setSelectedOptionIndex(-1)
     }
   }
 
-  // 强制纠错逻辑
-  useEffect(() => {
-    if (testPhase === 'spelling' && mustTypeCorrect && showAnswer && !isCorrect && userInput.trim().length > 0) {
-      const currentWord = testWords[currentIndex]
-      if (currentWord && userInput.trim().toLowerCase() === currentWord.word.toLowerCase()) {
-        setMustTypeCorrect(false)
-        setIsCorrect(true)
-        
-        const newWordResults = new Map(wordResults)
-        const existing = newWordResults.get(currentWord.id) || { translationError: false, spellingError: false }
-        
-        const newResults = { ...results }
-        
-        // 逻辑：如果之前算错了(Error增加过)，现在拼对了，虽然不洗白Error，但要给Correct+1吗？
-        // 原逻辑：spellingCorrect + spellingErrors = currentIndex + 1
-        // 如果之前 Error+1 了，这里我们不应该再加 Correct，否则总数会溢出
-        // 除非我们想统计"最终拼对数"，但 ReportCard 已经改用 realCorrect 逻辑了
-        // 为了保持数据一致性，这里我们只更新 UI 状态让它过
-        // 但如果您的逻辑是"只要最后拼对了就算Correct"，请保留下面的逻辑：
-        
-        const currentTotal = results.spellingCorrect + results.spellingErrors
-        const expectedTotal = currentIndex + 1 
-        if (currentTotal < expectedTotal) {
-           newResults.spellingCorrect += 1
-        }
-        
-        newWordResults.set(currentWord.id, { ...existing, spellingError: existing.spellingError })
-        
-        setWordResults(newWordResults)
-        setResults(newResults)
-        saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults)
-        
-        // ✅ 核心修复：这里也必须传递最新的结果
-        setTimeout(() => {
-          nextQuestion(newResults, newWordResults)
-        }, 1500)
-      }
-    }
-  }, [userInput, mustTypeCorrect, showAnswer, testPhase, testWords, currentIndex, isCorrect, wordResults, results])
+  // 选择题不再需要强制纠错逻辑
 
   useEffect(() => {
     if (testPhase === 'spelling' && testWords[currentIndex]) {
@@ -592,23 +621,67 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
           {testPhase === 'translation' ? (
             <>
               <h2 className="text-6xl font-bold text-gray-800 mb-8 text-center">{currentWord.word}</h2>
-              <div className="w-full max-w-md">
-                <input
-                  type="text"
-                  value={userInput}
-                  autoFocus
-                  onChange={(e) => setUserInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      if (!showAnswer) handleTranslationSubmit()
-                      else if (Date.now() - lastSubmissionTime.current > 500) nextQuestion() // 这里读 state 没关系，因为是用户手动触发，肯定已经是新渲染周期
-                    }
-                  }}
-                  placeholder="请输入中文翻译..."
-                  className="w-full px-6 py-4 text-xl border-4 border-candy-blue rounded-2xl focus:outline-none focus:border-candy-green transition-all"
-                  disabled={showAnswer}
-                />
+              <div className="w-full max-w-2xl">
+                {loadingOptions ? (
+                  <div className="flex items-center justify-center py-8">
+                    <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-4 border-candy-blue border-t-transparent rounded-full" />
+                    <span className="ml-4 text-gray-600">正在生成选项...</span>
+                  </div>
+                ) : currentWord.translationOptions ? (
+                  <div className="space-y-3">
+                    {currentWord.translationOptions.map((option, index) => {
+                      const isSelected = selectedOptionIndex === index
+                      const isCorrectOption = index === currentWord.translationCorrectIndex
+                      const showResult = showAnswer
+                      
+                      let buttonClass = 'w-full text-left px-6 py-4 text-lg border-2 rounded-xl transition-all font-medium'
+                      if (showResult) {
+                        if (isCorrectOption) {
+                          buttonClass += ' bg-green-100 border-green-500 text-green-700'
+                        } else if (isSelected && !isCorrectOption) {
+                          buttonClass += ' bg-red-100 border-red-500 text-red-700'
+                        } else {
+                          buttonClass += ' bg-gray-50 border-gray-200 text-gray-400'
+                        }
+                      } else {
+                        if (isSelected) {
+                          buttonClass += ' bg-candy-blue/20 border-candy-blue text-candy-blue shadow-md'
+                        } else {
+                          buttonClass += ' bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-candy-blue/50'
+                        }
+                      }
+                      
+                      return (
+                        <motion.button
+                          key={index}
+                          whileHover={!showResult ? { scale: 1.02 } : {}}
+                          whileTap={!showResult ? { scale: 0.98 } : {}}
+                          onClick={() => {
+                            if (!showAnswer) {
+                              setSelectedOptionIndex(index)
+                            }
+                          }}
+                          disabled={showAnswer}
+                          className={buttonClass}
+                        >
+                          <div className="flex items-center">
+                            <span className={`
+                              w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm mr-4 flex-shrink-0 font-bold
+                              ${showResult && isCorrectOption ? 'border-green-500 bg-green-500 text-white' : ''}
+                              ${showResult && isSelected && !isCorrectOption ? 'border-red-500 bg-red-500 text-white' : ''}
+                              ${!showResult && isSelected ? 'border-candy-blue bg-candy-blue text-white' : 'border-gray-300 bg-white text-gray-700'}
+                            `}>
+                              {String.fromCharCode(65 + index)}
+                            </span>
+                            {option}
+                          </div>
+                        </motion.button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-center text-gray-500">选项加载中...</p>
+                )}
                 {showAnswer && (
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`mt-4 p-4 rounded-2xl ${isCorrect ? 'bg-candy-green/20 border-2 border-candy-green' : 'bg-red-100 border-2 border-red-400'}`}>
                     <p className={`text-lg font-semibold ${isCorrect ? 'text-candy-green' : 'text-red-600'}`}>{isCorrect ? '✅ 正确！' : '❌ 错误'}</p>
@@ -620,28 +693,72 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
           ) : (
             <>
               <h2 className="text-5xl font-bold text-gray-800 mb-4 text-center">{currentWord.translation}</h2>
-              <p className="text-gray-500 mb-8">请拼写这个单词的英文</p>
-              <div className="w-full max-w-md">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={userInput}
-                  onChange={(e) => setUserInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      if (Date.now() - lastSubmissionTime.current < 500) return
-                      if (!showAnswer && !isCorrect) handleSpellingSubmit()
-                    }
-                  }}
-                  placeholder={mustTypeCorrect && showAnswer ? '请完整拼写正确答案...' : (spellingHint || '请输入英文单词...')}
-                  className={`w-full px-6 py-4 text-xl border-4 rounded-2xl focus:outline-none transition-all ${showAnswer && !isCorrect ? 'border-red-400 bg-red-50' : 'border-candy-blue focus:border-candy-green'}`}
-                />
+              <p className="text-gray-500 mb-8">请选择这个单词的英文拼写</p>
+              <div className="w-full max-w-2xl">
+                {loadingOptions ? (
+                  <div className="flex items-center justify-center py-8">
+                    <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-4 border-candy-blue border-t-transparent rounded-full" />
+                    <span className="ml-4 text-gray-600">正在生成选项...</span>
+                  </div>
+                ) : currentWord.spellingOptions ? (
+                  <div className="space-y-3">
+                    {currentWord.spellingOptions.map((option, index) => {
+                      const isSelected = selectedOptionIndex === index
+                      const isCorrectOption = index === currentWord.spellingCorrectIndex
+                      const showResult = showAnswer
+                      
+                      let buttonClass = 'w-full text-left px-6 py-4 text-lg border-2 rounded-xl transition-all font-medium'
+                      if (showResult) {
+                        if (isCorrectOption) {
+                          buttonClass += ' bg-green-100 border-green-500 text-green-700'
+                        } else if (isSelected && !isCorrectOption) {
+                          buttonClass += ' bg-red-100 border-red-500 text-red-700'
+                        } else {
+                          buttonClass += ' bg-gray-50 border-gray-200 text-gray-400'
+                        }
+                      } else {
+                        if (isSelected) {
+                          buttonClass += ' bg-candy-green/20 border-candy-green text-candy-green shadow-md'
+                        } else {
+                          buttonClass += ' bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-candy-green/50'
+                        }
+                      }
+                      
+                      return (
+                        <motion.button
+                          key={index}
+                          whileHover={!showResult ? { scale: 1.02 } : {}}
+                          whileTap={!showResult ? { scale: 0.98 } : {}}
+                          onClick={() => {
+                            if (!showAnswer) {
+                              setSelectedOptionIndex(index)
+                            }
+                          }}
+                          disabled={showAnswer}
+                          className={buttonClass}
+                        >
+                          <div className="flex items-center">
+                            <span className={`
+                              w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm mr-4 flex-shrink-0 font-bold
+                              ${showResult && isCorrectOption ? 'border-green-500 bg-green-500 text-white' : ''}
+                              ${showResult && isSelected && !isCorrectOption ? 'border-red-500 bg-red-500 text-white' : ''}
+                              ${!showResult && isSelected ? 'border-candy-green bg-candy-green text-white' : 'border-gray-300 bg-white text-gray-700'}
+                            `}>
+                              {String.fromCharCode(65 + index)}
+                            </span>
+                            {option}
+                          </div>
+                        </motion.button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-center text-gray-500">选项加载中...</p>
+                )}
                 {showAnswer && !isCorrect && (
                   <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="mt-4 p-4 rounded-2xl bg-red-100 border-2 border-red-400">
                     <p className="text-red-600 font-semibold mb-2">❌ 拼写错误</p>
                     <p className="text-red-700 font-bold text-xl mb-2">正确答案：<span className="underline">{currentWord.word}</span></p>
-                    {mustTypeCorrect && <p className="text-gray-700 mt-2 text-sm font-semibold">⚠️ 请在上方输入框中完整拼写正确答案后才能继续</p>}
                   </motion.div>
                 )}
                 {isCorrect && (
@@ -655,15 +772,55 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
         </motion.div>
 
         <div className="flex justify-center gap-4">
-          {testPhase === 'translation' && showAnswer && (
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => nextQuestion()} className="bg-candy-blue text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transition-all text-lg">
-              下一题 →
-            </motion.button>
+          {testPhase === 'translation' && (
+            <>
+              {!showAnswer && (
+                <motion.button 
+                  whileHover={{ scale: 1.05 }} 
+                  whileTap={{ scale: 0.95 }} 
+                  onClick={handleTranslationSubmit} 
+                  disabled={selectedOptionIndex === -1} 
+                  className="bg-candy-blue text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transition-all text-lg disabled:opacity-50"
+                >
+                  提交
+                </motion.button>
+              )}
+              {showAnswer && (
+                <motion.button 
+                  whileHover={{ scale: 1.05 }} 
+                  whileTap={{ scale: 0.95 }} 
+                  onClick={() => nextQuestion()} 
+                  className="bg-candy-blue text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transition-all text-lg"
+                >
+                  下一题 →
+                </motion.button>
+              )}
+            </>
           )}
-          {testPhase === 'spelling' && !showAnswer && (
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleSpellingSubmit} disabled={!userInput.trim()} className="bg-candy-green text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transition-all text-lg disabled:opacity-50">
-              提交
-            </motion.button>
+          {testPhase === 'spelling' && (
+            <>
+              {!showAnswer && (
+                <motion.button 
+                  whileHover={{ scale: 1.05 }} 
+                  whileTap={{ scale: 0.95 }} 
+                  onClick={handleSpellingSubmit} 
+                  disabled={selectedOptionIndex === -1} 
+                  className="bg-candy-green text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transition-all text-lg disabled:opacity-50"
+                >
+                  提交
+                </motion.button>
+              )}
+              {showAnswer && !isCorrect && (
+                <motion.button 
+                  whileHover={{ scale: 1.05 }} 
+                  whileTap={{ scale: 0.95 }} 
+                  onClick={() => nextQuestion()} 
+                  className="bg-candy-green text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transition-all text-lg"
+                >
+                  下一题 →
+                </motion.button>
+              )}
+            </>
           )}
         </div>
       </div>
