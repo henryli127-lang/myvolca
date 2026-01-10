@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { auth, profiles, studyLogs, userProgress, supabase } from '@/lib/supabase'
+import { auth, profiles, studyLogs, userProgress, articles, supabase } from '@/lib/supabase'
 import Auth from './components/Auth'
 import Settings from './components/Settings'
 import StudentDashboard from './components/StudentDashboard'
@@ -10,9 +10,11 @@ import Learning from './components/Learning'
 import Challenge from './components/Challenge'
 import ReportCard from './components/ReportCard'
 import StorySpark from './components/StorySpark'
+import Library from './components/Library'
+import ArticleView from './components/ArticleView'
 import type { User } from '@supabase/supabase-js'
 
-type AppStage = 'dashboard' | 'learning' | 'challenge' | 'report' | 'storyspark' | 'transition'
+type AppStage = 'dashboard' | 'learning' | 'challenge' | 'report' | 'storyspark' | 'transition' | 'library' | 'article'
 
 interface TestResults {
   translationCorrect: number
@@ -49,6 +51,7 @@ export default function Home() {
   const [appStage, setAppStage] = useState<AppStage>('dashboard')
   const [testResults, setTestResults] = useState<TestResults | null>(null)
   const [testWords, setTestWords] = useState<TestWord[]>([])
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null)
   const [sessionKey, setSessionKey] = useState<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   const sessionStartTime = useRef<Date>(new Date())
   const sessionId = useRef<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`) 
@@ -364,9 +367,52 @@ const handleLogout = async (force: boolean = false) => {
     // 进度会在完成学习/测试时自动清除
     setAppStage('dashboard')
     setTestResults(null)
+    setSelectedArticleId(null)
     // 不清除 testWords，因为可能还有阅读进度需要恢复
     // setTestWords([])
     setSessionKey(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
+  }
+
+  // 保存文章到图书馆
+  const handleSaveArticle = async (article: {
+    title: string
+    content: string
+    htmlContent: string
+    imageUrl?: string
+    quiz?: any
+    character?: any
+    setting?: any
+  }) => {
+    if (!user) return
+    
+    try {
+      const { error } = await articles.save(user.id, article)
+      if (error) {
+        console.error('保存文章到图书馆失败:', error)
+      } else {
+        console.log('文章已保存到图书馆')
+      }
+    } catch (err) {
+      console.error('保存文章异常:', err)
+    }
+  }
+
+  // 打开图书馆
+  const handleOpenLibrary = () => {
+    setAppStage('library')
+    setSelectedArticleId(null)
+  }
+
+  // 查看文章
+  const handleViewArticle = (articleId: string) => {
+    setSelectedArticleId(articleId)
+    setAppStage('article')
+  }
+
+  // 返回图书馆
+  const handleBackToLibrary = () => {
+    setAppStage('library')
+    setSelectedArticleId(null)
   }
 
   // 监听 StorySpark 打开事件
@@ -439,19 +485,8 @@ const handleLogout = async (force: boolean = false) => {
 
   return (
     <div className="min-h-screen font-quicksand">
-      {appStage === 'dashboard' && (
-        <div className="absolute top-4 right-4 z-10">
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setShowSettings(true)}
-            className="bg-white/80 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all"
-          >
-            ⚙️ 设置
-          </motion.button>
-        </div>
-      )}
-
+      {/* 设置按钮已移除，现在由StudentDashboard组件内的三个图标替代 */}
+      
       <AnimatePresence mode="wait">
         {appStage === 'transition' && (
           <motion.div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -469,6 +504,7 @@ const handleLogout = async (force: boolean = false) => {
               user={user}
               userProfile={userProfile}
               onStartAdventure={handleStartAdventure}
+              onOpenLibrary={handleOpenLibrary}
               onLogout={() => handleLogout()}
             />
           </motion.div>
@@ -512,7 +548,31 @@ const handleLogout = async (force: boolean = false) => {
           <motion.div key="storyspark" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
             <StorySpark
               testWords={testWords.length > 0 ? testWords : []}
+              userId={user?.id}
               onBack={handleBackToDashboard}
+              onLogout={() => handleLogout()}
+              onSaveArticle={handleSaveArticle}
+            />
+          </motion.div>
+        )}
+
+        {appStage === 'library' && user && (
+          <motion.div key="library" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
+            <Library
+              user={user}
+              onBack={handleBackToDashboard}
+              onViewArticle={handleViewArticle}
+              onLogout={() => handleLogout()}
+            />
+          </motion.div>
+        )}
+
+        {appStage === 'article' && user && selectedArticleId && (
+          <motion.div key="article" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
+            <ArticleView
+              user={user}
+              articleId={selectedArticleId}
+              onBack={handleBackToLibrary}
               onLogout={() => handleLogout()}
             />
           </motion.div>

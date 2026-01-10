@@ -18,6 +18,9 @@ export interface StoryState {
   quiz?: QuizQuestion[];
   isGenerated: boolean;
   timestamp: number;
+  imageUrl?: string;
+  imageData?: string; // base64 encoded image data
+  imageMimeType?: string;
 }
 
 export type GenerationStatus = 'idle' | 'generating' | 'success' | 'error';

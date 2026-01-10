@@ -10,10 +10,11 @@ interface StudentDashboardProps {
   user: User
   userProfile: any
   onStartAdventure: () => void
+  onOpenLibrary: () => void
   onLogout: () => void
 }
 
-export default function StudentDashboard({ user, userProfile, onStartAdventure, onLogout }: StudentDashboardProps) {
+export default function StudentDashboard({ user, userProfile, onStartAdventure, onOpenLibrary, onLogout }: StudentDashboardProps) {
   const [streakDays, setStreakDays] = useState(0)
   const [masteredCount, setMasteredCount] = useState(0)
   const [welcomeMessage, setWelcomeMessage] = useState('')
@@ -131,24 +132,53 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          whileHover={{ scale: 1.05 }}
+          whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setIsHistoryOpen(true)}
-          className="bg-white/80 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
+          className="group relative bg-white/80 backdrop-blur-sm text-gray-700 w-12 h-12 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center text-2xl"
+          title="查看单词明细"
         >
           <span>📅</span>
-          <span className="font-semibold">查看单词明细</span>
+          {/* Tooltip */}
+          <span className="absolute right-full mr-3 px-3 py-1.5 bg-gray-900 text-white text-sm font-semibold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+            查看单词明细
+            <span className="absolute left-full top-1/2 -translate-y-1/2 border-4 border-transparent border-l-gray-900"></span>
+          </span>
+        </motion.button>
+        
+        {/* 我的图书馆按钮 */}
+        <motion.button
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={onOpenLibrary}
+          className="group relative bg-white/80 backdrop-blur-sm text-gray-700 w-12 h-12 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center text-2xl"
+          title="我的图书馆"
+        >
+          <span>📚</span>
+          {/* Tooltip */}
+          <span className="absolute right-full mr-3 px-3 py-1.5 bg-gray-900 text-white text-sm font-semibold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+            我的图书馆
+            <span className="absolute left-full top-1/2 -translate-y-1/2 border-4 border-transparent border-l-gray-900"></span>
+          </span>
         </motion.button>
         
         {/* 退出按钮 */}
         <motion.button
-          whileHover={{ scale: 1.05 }}
+          whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
           onClick={onLogout}
-          className="bg-white/80 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
+          className="group relative bg-white/80 backdrop-blur-sm text-gray-700 w-12 h-12 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center text-2xl"
+          title="退出"
         >
           <span>🚪</span>
-          <span className="font-semibold">退出</span>
+          {/* Tooltip */}
+          <span className="absolute right-full mr-3 px-3 py-1.5 bg-gray-900 text-white text-sm font-semibold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+            退出
+            <span className="absolute left-full top-1/2 -translate-y-1/2 border-4 border-transparent border-l-gray-900"></span>
+          </span>
         </motion.button>
       </div>
       <div className="max-w-4xl mx-auto">

@@ -840,3 +840,90 @@ export const reports = {
       return { data, error }
     }
   }
+
+// 文章/图书馆相关操作
+export const articles = {
+  // 保存文章到图书馆
+  save: async (userId: string, article: {
+    title: string
+    content: string
+    htmlContent: string
+    imageUrl?: string
+    quiz?: any
+    character?: any
+    setting?: any
+  }) => {
+    try {
+      const { data, error } = await supabase
+        .from('articles')
+        .insert({
+          user_id: userId,
+          title: article.title,
+          content: article.content,
+          html_content: article.htmlContent,
+          image_url: article.imageUrl,
+          quiz: article.quiz,
+          character: article.character,
+          setting: article.setting,
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single()
+
+      return { data, error }
+    } catch (err: any) {
+      console.error('保存文章失败:', err)
+      return { data: null, error: err }
+    }
+  },
+
+  // 获取用户的所有文章
+  getUserArticles: async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('articles')
+        .select('id, title, image_url, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+
+      return { data, error }
+    } catch (err: any) {
+      console.error('获取文章列表失败:', err)
+      return { data: null, error: err }
+    }
+  },
+
+  // 获取单篇文章详情
+  getById: async (articleId: string, userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('articles')
+        .select('*')
+        .eq('id', articleId)
+        .eq('user_id', userId)
+        .single()
+
+      return { data, error }
+    } catch (err: any) {
+      console.error('获取文章详情失败:', err)
+      return { data: null, error: err }
+    }
+  },
+
+  // 删除文章
+  delete: async (articleId: string, userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('articles')
+        .delete()
+        .eq('id', articleId)
+        .eq('user_id', userId)
+        .select()
+
+      return { data, error }
+    } catch (err: any) {
+      console.error('删除文章失败:', err)
+      return { data: null, error: err }
+    }
+  },
+}

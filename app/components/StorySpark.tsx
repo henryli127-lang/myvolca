@@ -11,8 +11,18 @@ interface StorySparkProps {
     word: string
     translation: string
   }>
+  userId?: string
   onBack: () => void
   onLogout: () => void
+  onSaveArticle?: (article: {
+    title: string
+    content: string
+    htmlContent: string
+    imageUrl?: string
+    quiz?: any
+    character?: any
+    setting?: any
+  }) => Promise<void>
 }
 
 const CHARACTERS: SelectionItem[] = [
@@ -77,7 +87,89 @@ const SETTINGS: SelectionItem[] = [
   }
 ]
 
-export default function StorySpark({ testWords, onBack, onLogout }: StorySparkProps) {
+// 生成HTML内容
+function generateHtmlContent(title: string, content: string, quiz: QuizQuestion[], imageUrl?: string): string {
+  const quizHtml = quiz.length > 0 ? `
+    <div class="quiz-section">
+      <h3>🧠 阅读理解测验</h3>
+      ${quiz.map((q, index) => `
+        <div class="quiz-question">
+          <p><strong>${index + 1}. ${q.question}</strong></p>
+          <ul>
+            ${q.options.map((opt, optIndex) => `
+              <li>${String.fromCharCode(65 + optIndex)}. ${opt}${optIndex === q.correctAnswerIndex ? ' ✓' : ''}</li>
+            `).join('')}
+          </ul>
+        </div>
+      `).join('')}
+    </div>
+  ` : ''
+
+  return `
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${title}</title>
+      <style>
+        body {
+          font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          max-width: 800px;
+          margin: 0 auto;
+          padding: 20px;
+          line-height: 1.8;
+          color: #333;
+        }
+        h1 {
+          color: #54a0ff;
+          text-align: center;
+          margin-bottom: 20px;
+        }
+        img {
+          width: 100%;
+          height: auto;
+          border-radius: 12px;
+          margin: 20px 0;
+        }
+        .content {
+          font-size: 18px;
+          line-height: 1.8;
+          margin: 20px 0;
+        }
+        .quiz-section {
+          margin-top: 40px;
+          padding-top: 20px;
+          border-top: 2px solid #ddd;
+        }
+        .quiz-question {
+          margin: 20px 0;
+          padding: 15px;
+          background: #f5f5f5;
+          border-radius: 8px;
+        }
+        ul {
+          list-style: none;
+          padding-left: 0;
+        }
+        li {
+          padding: 5px 0;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>${title}</h1>
+      ${imageUrl ? `<img src="${imageUrl}" alt="${title}" />` : ''}
+      <div class="content">
+        ${content.split('\n').map(p => p.trim() ? `<p>${p}</p>` : '').join('')}
+      </div>
+      ${quizHtml}
+    </body>
+    </html>
+  `
+}
+
+export default function StorySpark({ testWords, userId, onBack, onLogout, onSaveArticle }: StorySparkProps) {
   const [selectedCharacter, setSelectedCharacter] = useState<SelectionItem | null>(null)
   const [selectedSetting, setSelectedSetting] = useState<SelectionItem | null>(null)
   const [story, setStory] = useState<StoryState | null>(null)
@@ -212,12 +304,99 @@ export default function StorySpark({ testWords, onBack, onLogout }: StorySparkPr
       }
 
       const result = await response.json()
+      
+      // 生成故事图片
+      let imageUrl: string | undefined
+      let imageData: string | undefined
+      let imageMimeType: string | undefined
+      
+      try {
+        const imageResponse = await fetch('/api/story-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            title: result.title,
+            content: result.content,
+            character: selectedCharacter,
+            setting: selectedSetting,
+          }),
+        })
+        
+        if (imageResponse.ok) {
+          const imageResult = await imageResponse.json()
+          if (imageResult.imageUrl) {
+            imageUrl = imageResult.imageUrl
+          } else if (imageResult.imageData) {
+            imageData = imageResult.imageData
+            imageMimeType = imageResult.mimeType || 'image/png'
+            
+            // 上传base64图片到OSS
+            try {
+              // 将base64转换为Blob
+              const byteCharacters = atob(imageResult.imageData)
+              const byteNumbers = new Array(byteCharacters.length)
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i)
+              }
+              const byteArray = new Uint8Array(byteNumbers)
+              const blob = new Blob([byteArray], { type: imageResult.mimeType || 'image/png' })
+              
+              // 创建FormData上传到OSS
+              const formData = new FormData()
+              formData.append('file', blob, `story-${Date.now()}.png`)
+              
+              const uploadResponse = await fetch('/api/upload-oss', {
+                method: 'POST',
+                body: formData,
+              })
+              
+              if (uploadResponse.ok) {
+                const uploadResult = await uploadResponse.json()
+                imageUrl = uploadResult.url
+                // 清空base64数据，使用OSS URL
+                imageData = undefined
+              }
+            } catch (uploadError) {
+              console.error('上传图片到OSS失败:', uploadError)
+              // 上传失败不影响，继续使用base64
+            }
+          }
+        }
+      } catch (imageError) {
+        console.error('生成图片失败，继续显示故事:', imageError)
+        // 图片生成失败不影响故事显示
+      }
+      
+      // 生成HTML内容
+      const htmlContent = generateHtmlContent(result.title, result.content, result.quiz || [], imageUrl)
+      
+      // 保存文章到图书馆（后台异步保存，不阻塞UI）
+      if (onSaveArticle) {
+        onSaveArticle({
+          title: result.title,
+          content: result.content,
+          htmlContent,
+          imageUrl,
+          quiz: result.quiz,
+          character: selectedCharacter,
+          setting: selectedSetting,
+        }).catch((err) => {
+          console.error('保存文章到图书馆失败:', err)
+          // 保存失败不影响故事显示
+        })
+      }
+      
       setStory({
         title: result.title,
         content: result.content,
         quiz: result.quiz,
         isGenerated: true,
         timestamp: Date.now(),
+        imageUrl,
+        imageData,
+        imageMimeType,
       })
       setStatus('success')
     } catch (err: any) {
@@ -769,6 +948,35 @@ function StoryDisplay({
               )}
             </motion.button>
           </div>
+          
+          {/* 故事图片 */}
+          {(story.imageUrl || story.imageData) && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="mb-8 w-full"
+            >
+              <div className="relative w-full" style={{ aspectRatio: '16/9' }}>
+                {story.imageUrl ? (
+                  <img
+                    src={story.imageUrl}
+                    alt={story.title}
+                    className="w-full h-full object-cover rounded-2xl shadow-lg"
+                    loading="lazy"
+                  />
+                ) : story.imageData ? (
+                  <img
+                    src={`data:${story.imageMimeType || 'image/png'};base64,${story.imageData}`}
+                    alt={story.title}
+                    className="w-full h-full object-cover rounded-2xl shadow-lg"
+                    loading="lazy"
+                  />
+                ) : null}
+              </div>
+            </motion.div>
+          )}
+          
           <div className="prose prose-lg max-w-none">
             {story.content.split('\n').map((paragraph, idx) => {
               if (!paragraph.trim()) return null
