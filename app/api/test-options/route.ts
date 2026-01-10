@@ -1,5 +1,15 @@
 import { NextResponse } from 'next/server';
 
+// Fisher-Yates 洗牌算法：随机排列数组
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 interface TestWordsRequest {
   words: Array<{
     word: string;
@@ -124,8 +134,31 @@ Return ONLY valid JSON, no markdown formatting.
       }
     }
 
+    // 随机排列选项并更新正确答案索引
+    const shuffledOptions = (json.options || []).map((option: any) => {
+      // 随机排列翻译选项
+      const translationOptions = [...(option.translationOptions || [])];
+      const translationCorrectAnswer = translationOptions[option.translationCorrectIndex || 0];
+      const translationShuffled = shuffleArray([...translationOptions]);
+      const translationCorrectIndex = translationShuffled.findIndex(opt => opt === translationCorrectAnswer);
+
+      // 随机排列拼写选项
+      const spellingOptions = [...(option.spellingOptions || [])];
+      const spellingCorrectAnswer = spellingOptions[option.spellingCorrectIndex || 0];
+      const spellingShuffled = shuffleArray([...spellingOptions]);
+      const spellingCorrectIndex = spellingShuffled.findIndex(opt => opt === spellingCorrectAnswer);
+
+      return {
+        ...option,
+        translationOptions: translationShuffled,
+        translationCorrectIndex: translationCorrectIndex >= 0 ? translationCorrectIndex : 0,
+        spellingOptions: spellingShuffled,
+        spellingCorrectIndex: spellingCorrectIndex >= 0 ? spellingCorrectIndex : 0,
+      };
+    });
+
     return NextResponse.json({
-      options: json.options || [],
+      options: shuffledOptions,
     });
   } catch (error: any) {
     console.error('Test options generation error:', error);
