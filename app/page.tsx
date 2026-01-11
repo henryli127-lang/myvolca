@@ -355,9 +355,10 @@ const handleLogout = async (force: boolean = false) => {
       Promise.all(results.testWords.map(async (word) => {
         const transErrorCount = word.translationError ? 1 : 0
         const spellErrorCount = word.spellingError ? 1 : 0
-        if (transErrorCount > 0 || spellErrorCount > 0) {
-           await userProgress.updateTestResults(word.id, transErrorCount, spellErrorCount)
-        }
+        // 根据是否有错误决定status：如果有错误则保持'learning'，如果没有错误则标记为'mastered'
+        const status = (transErrorCount === 0 && spellErrorCount === 0) ? 'mastered' : 'learning'
+        // 更新所有单词的测试结果（包括没有错误的单词）
+        await userProgress.updateTestResults(word.id, transErrorCount, spellErrorCount, status)
       })).catch((err) => console.error('❌ 保存测试结果失败:', err))
     }
   }

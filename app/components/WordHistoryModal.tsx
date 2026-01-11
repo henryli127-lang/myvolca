@@ -79,7 +79,7 @@ export default function WordHistoryModal({ isOpen, onClose, userId, title = "已
           <td>${item.word}</td>
           <td>${item.translation}</td>
           <td>${statusHtml}</td>
-          <td>${new Date(item.last_reviewed_at).toLocaleString()}</td>
+          <td>${item.last_reviewed_at ? new Date(item.last_reviewed_at).toLocaleString() : '-'}</td>
         </tr>
       `
     }).join('')
@@ -227,8 +227,14 @@ export default function WordHistoryModal({ isOpen, onClose, userId, title = "已
                           {getStatusTag(item.translation_errors, item.spelling_errors)}
                         </td>
                         <td className="p-3 text-gray-400 text-sm text-right">
-                          {new Date(item.last_reviewed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} <br/>
-                          {new Date(item.last_reviewed_at).toLocaleDateString()}
+                          {item.last_reviewed_at ? (
+                            <>
+                              {new Date(item.last_reviewed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} <br/>
+                              {new Date(item.last_reviewed_at).toLocaleDateString()}
+                            </>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
                         </td>
                       </tr>
                     ))}

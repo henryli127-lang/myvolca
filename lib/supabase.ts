@@ -576,13 +576,15 @@ export const userProgress = {
   updateTestResults: async (
     wordId: number,
     translationErrors: number,
-    spellingErrors: number
+    spellingErrors: number,
+    status: 'learning' | 'mastered' = 'learning'
   ) => {
     try {
       const { data, error } = await supabase.rpc('save_word_challenge_result', {
         p_word_id: wordId,
         p_trans_errors: translationErrors,
-        p_spell_errors: spellingErrors
+        p_spell_errors: spellingErrors,
+        p_status: status
       })
       return { data, error }
     } catch (err: any) {
