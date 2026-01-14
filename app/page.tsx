@@ -85,8 +85,10 @@ export default function Home() {
         const parsed = JSON.parse(saved)
         // 检查时间戳（24小时内有效）
         if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
-          // 验证是否有 testWords
-          if (parsed.testWords && Array.isArray(parsed.testWords) && parsed.testWords.length > 0) {
+          // 验证是否有 testWords 或 selectedCharacter（支持只选择了角色的情况）
+          if ((parsed.testWords && Array.isArray(parsed.testWords) && parsed.testWords.length > 0) ||
+              (parsed.selectedCharacter && !parsed.story)) {
+            // 如果有角色选择但还没有生成故事，也返回进度（允许恢复角色选择界面）
             return parsed
           }
         } else {
@@ -97,6 +99,33 @@ export default function Home() {
     } catch (error) {
       console.error('检查阅读进度失败:', error)
       localStorage.removeItem('reading_progress')
+    }
+    return null
+  }
+
+  const checkReportProgress = (userId: string) => {
+    if (typeof window === 'undefined') return null
+    try {
+      const reportProgressKey = `report_progress_${userId}`
+      const saved = localStorage.getItem(reportProgressKey)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        // 检查时间戳（24小时内有效）
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+          // 验证是否有 testResults 和 testWords
+          if (parsed.testResults && parsed.testWords && Array.isArray(parsed.testWords) && parsed.testWords.length > 0) {
+            return parsed
+          }
+        } else {
+          // 超过24小时，清除旧进度
+          localStorage.removeItem(reportProgressKey)
+        }
+      }
+    } catch (error) {
+      console.error('检查成绩单进度失败:', error)
+      if (typeof window !== 'undefined' && user) {
+        localStorage.removeItem(`report_progress_${userId}`)
+      }
     }
     return null
   }
@@ -175,20 +204,39 @@ export default function Home() {
 
           // 路由跳转逻辑
           if (profile.role === 'child') {
-            // 优先检查阅读进度
-            const readingProgress = checkReadingProgress(user.id)
-            if (readingProgress) {
-              // 恢复阅读状态
-              setTestWords(readingProgress.testWords.map((w: any) => ({
+            // 优先检查成绩单进度（测试完成后未查看的成绩单）
+            const reportProgress = checkReportProgress(user.id)
+            if (reportProgress) {
+              // 恢复成绩单状态
+              setTestResults(reportProgress.testResults)
+              setTestWords(reportProgress.testWords.map((w: any) => ({
                 id: w.id || 0,
                 word: w.word,
-                translation: w.translation
+                translation: w.translation,
+                translationError: w.translationError,
+                spellingError: w.spellingError
               })))
-              setAppStage('storyspark')
-            } else if (checkTestProgress(user.id)) {
-              setAppStage('challenge')
+              setAppStage('report')
             } else {
-              setAppStage('dashboard')
+              // 其次检查阅读进度
+              const readingProgress = checkReadingProgress(user.id)
+              if (readingProgress) {
+                // 恢复阅读状态
+                // 如果有 testWords，恢复它们；如果没有但 selectedCharacter 存在，也跳转到 storyspark（StorySpark 会自己恢复状态）
+                if (readingProgress.testWords && Array.isArray(readingProgress.testWords) && readingProgress.testWords.length > 0) {
+                  setTestWords(readingProgress.testWords.map((w: any) => ({
+                    id: w.id || 0,
+                    word: w.word,
+                    translation: w.translation
+                  })))
+                }
+                // 即使没有 testWords，只要有 selectedCharacter，也跳转到 storyspark（允许恢复角色选择界面）
+                setAppStage('storyspark')
+              } else if (checkTestProgress(user.id)) {
+                setAppStage('challenge')
+              } else {
+                setAppStage('dashboard')
+              }
             }
           }
         }
@@ -263,6 +311,7 @@ const handleLogout = async (force: boolean = false) => {
           localStorage.removeItem(`test_progress_${user.id}`)
           localStorage.removeItem(`word_list_${user.id}`)
           localStorage.removeItem(`learning_progress_${user.id}`)
+          localStorage.removeItem(`report_progress_${user.id}`)
       } catch (e) { }
   }
 
@@ -338,6 +387,20 @@ const handleLogout = async (force: boolean = false) => {
       setTestWords(results.testWords)
       setSessionKey(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
       setAppStage('report')
+      
+      // 保存成绩单状态到 localStorage，以便退出后再次登录能恢复
+      if (typeof window !== 'undefined' && user) {
+        try {
+          const reportProgressKey = `report_progress_${user.id}`
+          localStorage.setItem(reportProgressKey, JSON.stringify({
+            testResults: results,
+            testWords: results.testWords,
+            timestamp: Date.now()
+          }))
+        } catch (error) {
+          console.error('保存成绩单进度失败:', error)
+        }
+      }
     } catch (error) {
       console.error('更新 UI 状态失败:', error)
       setAppStage('report')
@@ -372,6 +435,15 @@ const handleLogout = async (force: boolean = false) => {
     // 不清除 testWords，因为可能还有阅读进度需要恢复
     // setTestWords([])
     setSessionKey(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
+    
+    // 清除成绩单进度，因为用户已经查看过了
+    if (typeof window !== 'undefined' && user) {
+      try {
+        localStorage.removeItem(`report_progress_${user.id}`)
+      } catch (error) {
+        console.error('清除成绩单进度失败:', error)
+      }
+    }
   }
 
   // 保存文章到图书馆

@@ -32,6 +32,7 @@ export default function ArticleView({ user, articleId, onBack, onLogout }: Artic
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [playbackRate, setPlaybackRate] = useState(1.0) // 播放速度，默认1.0（正常速度）
 
   useEffect(() => {
     const loadArticle = async () => {
@@ -192,6 +193,9 @@ export default function ArticleView({ user, articleId, onBack, onLogout }: Artic
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       
+      // 设置播放速度
+      audio.playbackRate = playbackRate
+      
       audioRef.current = audio
 
       audio.onplay = () => {
@@ -326,11 +330,33 @@ export default function ArticleView({ user, articleId, onBack, onLogout }: Artic
 
           {/* 文章内容 */}
           <div className="p-8 md:p-12 max-h-[85vh] overflow-y-auto">
-            {/* 标题和朗读按钮 */}
-            <div className="relative flex items-center justify-center mb-8">
-              <h2 className="text-3xl md:text-4xl font-bold text-center bg-gradient-to-r from-candy-blue to-candy-green bg-clip-text text-transparent">
-                {article.title}
-              </h2>
+            {/* 播放速度控制和朗读按钮 - 放在标题上方 */}
+            <div className="flex justify-end items-center gap-2 mb-4">
+              {/* 播放速度选择 */}
+              <div className="flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-md">
+                <span className="text-xs text-gray-600 font-semibold">速度:</span>
+                <select
+                  value={playbackRate.toString()}
+                  onChange={(e) => {
+                    const newRate = parseFloat(e.target.value)
+                    if (!isNaN(newRate) && newRate > 0) {
+                      setPlaybackRate(newRate)
+                      // 如果正在播放，立即应用新的播放速度
+                      if (audioRef.current) {
+                        audioRef.current.playbackRate = newRate
+                      }
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs font-semibold text-candy-blue bg-transparent border-none outline-none cursor-pointer"
+                >
+                  <option value="0.5">0.5x</option>
+                  <option value="0.75">0.75x</option>
+                  <option value="1">1.0x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                </select>
+              </div>
               {/* 朗读按钮 */}
               <motion.button
                 whileHover={{ scale: 1.1 }}
@@ -338,7 +364,7 @@ export default function ArticleView({ user, articleId, onBack, onLogout }: Artic
                 onClick={playAudio}
                 disabled={isLoading}
                 className={`
-                  absolute right-0 flex items-center justify-center w-12 h-12 rounded-full transition-all shadow-lg
+                  flex items-center justify-center w-12 h-12 rounded-full transition-all shadow-lg
                   ${isPlaying
                     ? 'bg-candy-green text-white animate-pulse'
                     : isLoading
@@ -360,6 +386,13 @@ export default function ArticleView({ user, articleId, onBack, onLogout }: Artic
                   <Volume2 className="w-6 h-6" />
                 )}
               </motion.button>
+            </div>
+            
+            {/* 标题 */}
+            <div className="flex items-center justify-center mb-8">
+              <h2 className="text-3xl md:text-4xl font-bold text-center bg-gradient-to-r from-candy-blue to-candy-green bg-clip-text text-transparent">
+                {article.title}
+              </h2>
             </div>
 
             {/* 文章图片 */}

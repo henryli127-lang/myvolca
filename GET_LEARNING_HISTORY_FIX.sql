@@ -13,7 +13,7 @@ CREATE OR REPLACE FUNCTION get_learning_history(
     p_end_date TIMESTAMPTZ
 )
 RETURNS TABLE (
-    word_id INTEGER,
+    word_id BIGINT,
     word TEXT,
     translation TEXT,
     translation_errors INTEGER,

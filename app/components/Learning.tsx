@@ -49,6 +49,7 @@ export default function Learning({ user, targetCount, onComplete, onLogout }: Le
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [speechSupported, setSpeechSupported] = useState(false)
   const [showTransition, setShowTransition] = useState(false)
+  const [playbackRate, setPlaybackRate] = useState(1.0) // 播放速度，默认1.0（正常速度）
   const TARGET_WORDS = targetCount
   const LEARNING_PROGRESS_KEY = `learning_progress_${user.id}`
   // ✅ 添加这一行，解决 "audioRef is not defined" 报错
@@ -495,6 +496,9 @@ const loadProgress = () => {
       const url = URL.createObjectURL(audioBlob)
       const audio = new Audio(url)
       
+      // 设置播放速度
+      audio.playbackRate = playbackRate
+      
       // ✅ 赋值给 Ref 
       audioRef.current = audio
 
@@ -558,7 +562,7 @@ const loadProgress = () => {
         lastPlayedWordRef.current = null
       }
     }
-  }, []) // 移除 isSpeaking 依赖，避免循环触发
+  }, [playbackRate]) // 包含 playbackRate 依赖，确保速度设置生效
   
   // 自动播放：只在单词变化且卡片未翻转时播放
   useEffect(() => {
@@ -788,15 +792,42 @@ const loadProgress = () => {
         </motion.button>
       </div>
       <div className="max-w-4xl mx-auto">
-        {/* 进度条 */}
+        {/* 进度条和播放速度控制 */}
         <div className="mb-6">
           <div className="flex justify-between items-center mb-2">
             <span className="text-lg font-semibold text-gray-700">
               学习进度: {learnedCount} / {TARGET_WORDS}
             </span>
-            <span className="text-sm text-gray-600">
-              {Math.round((learnedCount / TARGET_WORDS) * 100)}%
-            </span>
+            <div className="flex items-center gap-4">
+              {/* 播放速度选择 */}
+              <div className="flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-md">
+                <span className="text-xs text-gray-600 font-semibold">播放速度:</span>
+                <select
+                  value={playbackRate.toString()}
+                  onChange={(e) => {
+                    const newRate = parseFloat(e.target.value)
+                    if (!isNaN(newRate) && newRate > 0) {
+                      setPlaybackRate(newRate)
+                      // 如果正在播放，立即应用新的播放速度
+                      if (audioRef.current) {
+                        audioRef.current.playbackRate = newRate
+                      }
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs font-semibold text-candy-blue bg-transparent border-none outline-none cursor-pointer"
+                >
+                  <option value="0.5">0.5x</option>
+                  <option value="0.75">0.75x</option>
+                  <option value="1">1.0x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                </select>
+              </div>
+              <span className="text-sm text-gray-600">
+                {Math.round((learnedCount / TARGET_WORDS) * 100)}%
+              </span>
+            </div>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
             <motion.div

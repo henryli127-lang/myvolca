@@ -219,6 +219,7 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
             const hasOverlap = Array.from(savedWords).some((w: string) => currentWords.has(w))
             
             if (hasOverlap || parsed.testWords.length === testWords.length) {
+              // 恢复状态，即使 testWords 不完全匹配，只要有关键数据就恢复
               if (parsed.selectedCharacter) {
                 setSelectedCharacter(parsed.selectedCharacter)
               }
@@ -232,10 +233,33 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
                 setStatus(parsed.status)
               }
               
-              console.log('已恢复阅读进度')
+              console.log('已恢复阅读进度', {
+                hasCharacter: !!parsed.selectedCharacter,
+                hasSetting: !!parsed.selectedSetting,
+                hasStory: !!parsed.story,
+                status: parsed.status
+              })
             } else {
-              // testWords 不匹配，清除旧进度
-              localStorage.removeItem('reading_progress')
+              // testWords 不匹配，但如果只有角色选择状态（没有故事），仍然保留
+              // 这样可以支持用户在不同测试会话中继续选择角色
+              if (parsed.selectedCharacter && !parsed.story) {
+                // 只恢复角色选择，清除其他不匹配的数据
+                setSelectedCharacter(parsed.selectedCharacter)
+                if (parsed.selectedSetting) {
+                  setSelectedSetting(parsed.selectedSetting)
+                }
+                // 更新 testWords 为当前值
+                const updatedProgress = {
+                  ...parsed,
+                  testWords,
+                  timestamp: Date.now()
+                }
+                localStorage.setItem('reading_progress', JSON.stringify(updatedProgress))
+                console.log('已恢复角色选择状态（testWords已更新）')
+              } else {
+                // testWords 不匹配且已有故事，清除旧进度
+                localStorage.removeItem('reading_progress')
+              }
             }
           } else {
             // 没有 testWords，清除旧进度
@@ -628,6 +652,7 @@ function StoryDisplay({
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [playbackRate, setPlaybackRate] = useState(1.0) // 播放速度，默认1.0（正常速度）
   const [selectedWord, setSelectedWord] = useState<{ word: string; translation: string; x: number; y: number } | null>(null)
 
   // 创建单词到翻译的映射（支持多种形式）
@@ -837,6 +862,9 @@ function StoryDisplay({
       const url = URL.createObjectURL(audioBlob)
       const audio = new Audio(url)
       
+      // 设置播放速度
+      audio.playbackRate = playbackRate
+      
       audioRef.current = audio
 
       audio.onplay = () => {
@@ -918,35 +946,63 @@ function StoryDisplay({
             <h2 className="text-3xl md:text-4xl font-bold text-center bg-gradient-to-r from-candy-blue to-candy-green bg-clip-text text-transparent">
               {story.title}
             </h2>
-            {/* 朗读按钮 - 位于标题右侧 */}
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={playAudio}
-              disabled={isLoading}
-              className={`
-                absolute right-0 flex items-center justify-center w-12 h-12 rounded-full transition-all shadow-lg
-                ${isPlaying
-                  ? 'bg-candy-green text-white animate-pulse'
-                  : isLoading
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-candy-blue text-white hover:bg-candy-green'
-                }
-              `}
-              title={isPlaying ? '暂停朗读' : '朗读故事'}
-            >
-              {isLoading ? (
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                  className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
-                />
-              ) : isPlaying ? (
-                <VolumeX className="w-6 h-6" />
-              ) : (
-                <Volume2 className="w-6 h-6" />
-              )}
-            </motion.button>
+            {/* 播放速度控制和朗读按钮 - 位于标题右侧 */}
+            <div className="absolute right-0 flex items-center gap-2">
+              {/* 播放速度选择 */}
+              <div className="flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-md">
+                <span className="text-xs text-gray-600 font-semibold">速度:</span>
+                <select
+                  value={playbackRate.toString()}
+                  onChange={(e) => {
+                    const newRate = parseFloat(e.target.value)
+                    if (!isNaN(newRate) && newRate > 0) {
+                      setPlaybackRate(newRate)
+                      // 如果正在播放，立即应用新的播放速度
+                      if (audioRef.current) {
+                        audioRef.current.playbackRate = newRate
+                      }
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs font-semibold text-candy-blue bg-transparent border-none outline-none cursor-pointer"
+                >
+                  <option value="0.5">0.5x</option>
+                  <option value="0.75">0.75x</option>
+                  <option value="1">1.0x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                </select>
+              </div>
+              {/* 朗读按钮 */}
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={playAudio}
+                disabled={isLoading}
+                className={`
+                  flex items-center justify-center w-12 h-12 rounded-full transition-all shadow-lg
+                  ${isPlaying
+                    ? 'bg-candy-green text-white animate-pulse'
+                    : isLoading
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-candy-blue text-white hover:bg-candy-green'
+                  }
+                `}
+                title={isPlaying ? '暂停朗读' : '朗读故事'}
+              >
+                {isLoading ? (
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                    className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
+                  />
+                ) : isPlaying ? (
+                  <VolumeX className="w-6 h-6" />
+                ) : (
+                  <Volume2 className="w-6 h-6" />
+                )}
+              </motion.button>
+            </div>
           </div>
           
           {/* 故事图片 */}
