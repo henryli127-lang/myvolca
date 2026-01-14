@@ -55,25 +55,17 @@ export default function ArticleView({ user, articleId, onBack, onLogout }: Artic
     loadArticle()
   }, [articleId, user.id])
 
-  // 查询单词翻译
+  // 查询单词翻译（使用在线翻译服务）
   const lookupWordTranslation = useCallback(async (word: string): Promise<string | null> => {
     try {
-      const cleanWord = word.trim().toLowerCase()
-      console.log('ArticleView: 查询单词翻译:', cleanWord)
-      const response = await fetch(`/api/word-lookup?word=${encodeURIComponent(cleanWord)}`)
-      console.log('ArticleView: API响应状态:', response.status, response.ok)
-      
+      const response = await fetch(`/api/translate?word=${encodeURIComponent(word)}&lang=zh`)
       if (response.ok) {
         const data = await response.json()
-        console.log('ArticleView: API返回数据:', data)
         return data.translation || null
-      } else {
-        const errorData = await response.json()
-        console.error('ArticleView: API返回错误:', errorData)
-        return null
       }
+      return null
     } catch (error) {
-      console.error('ArticleView: 查询单词翻译异常:', error)
+      console.error('查询单词翻译失败:', error)
       return null
     }
   }, [])

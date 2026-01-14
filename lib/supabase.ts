@@ -856,23 +856,59 @@ export const articles = {
     setting?: any
   }) => {
     try {
-      const { data, error } = await supabase
+      // 先查找是否有相同标题和用户ID的文章（最近5分钟内创建的，避免更新太旧的文章）
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+      const { data: existing } = await supabase
         .from('articles')
-        .insert({
-          user_id: userId,
-          title: article.title,
-          content: article.content,
-          html_content: article.htmlContent,
-          image_url: article.imageUrl,
-          quiz: article.quiz,
-          character: article.character,
-          setting: article.setting,
-          created_at: new Date().toISOString(),
-        })
-        .select()
-        .single()
+        .select('id')
+        .eq('user_id', userId)
+        .eq('title', article.title)
+        .gte('created_at', fiveMinutesAgo) // 只查找最近5分钟内创建的文章
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-      return { data, error }
+      if (existing && existing.id) {
+        // 更新现有记录（用于更新imageUrl）
+        console.log('更新现有文章，ID:', existing.id, 'imageUrl:', article.imageUrl)
+        const { data: updated, error: updateError } = await supabase
+          .from('articles')
+          .update({
+            content: article.content,
+            html_content: article.htmlContent,
+            image_url: article.imageUrl, // 更新图片URL
+            quiz: article.quiz,
+            character: article.character,
+            setting: article.setting,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id)
+          .select()
+          .single()
+
+        return { data: updated, error: updateError }
+      } else {
+        // 插入新记录
+        console.log('插入新文章，imageUrl:', article.imageUrl)
+        const { data, error } = await supabase
+          .from('articles')
+          .insert({
+            user_id: userId,
+            title: article.title,
+            content: article.content,
+            html_content: article.htmlContent,
+            image_url: article.imageUrl,
+            quiz: article.quiz,
+            character: article.character,
+            setting: article.setting,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .select()
+          .single()
+
+        return { data, error }
+      }
     } catch (err: any) {
       console.error('保存文章失败:', err)
       return { data: null, error: err }

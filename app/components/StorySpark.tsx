@@ -178,19 +178,26 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
   const [hasRestoredProgress, setHasRestoredProgress] = useState(false)
 
   // 保存阅读状态到 localStorage
-  const saveReadingProgress = useCallback(() => {
+  const saveReadingProgress = useCallback((clearProgress = false, quizCompleted = false) => {
     if (typeof window === 'undefined') return
     
     try {
-      const progress = {
-        selectedCharacter,
-        selectedSetting,
-        story,
-        status,
-        testWords,
-        timestamp: Date.now()
+      if (clearProgress) {
+        // 清除阅读进度（quiz完成后）
+        localStorage.removeItem('reading_progress')
+        console.log('已清除阅读进度（quiz已完成）')
+      } else {
+        const progress = {
+          selectedCharacter,
+          selectedSetting,
+          story,
+          status,
+          testWords,
+          quizCompleted, // 记录quiz是否已完成
+          timestamp: Date.now()
+        }
+        localStorage.setItem('reading_progress', JSON.stringify(progress))
       }
-      localStorage.setItem('reading_progress', JSON.stringify(progress))
     } catch (error) {
       console.error('保存阅读进度失败:', error)
     }
@@ -211,8 +218,41 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
         const parsed = JSON.parse(saved)
         // 检查时间戳（24小时内有效）
         if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+          // 优先检查：如果有story且quiz未完成，直接恢复（不需要testWords匹配）
+          if (parsed.story && !parsed.quizCompleted) {
+            console.log('检测到未完成的story，直接恢复...')
+            if (parsed.selectedCharacter) {
+              setSelectedCharacter(parsed.selectedCharacter)
+            }
+            if (parsed.selectedSetting) {
+              setSelectedSetting(parsed.selectedSetting)
+            }
+            setStory(parsed.story)
+            setStatus('success') // 确保显示文章
+            console.log('已恢复未完成的story', {
+              hasCharacter: !!parsed.selectedCharacter,
+              hasSetting: !!parsed.selectedSetting,
+              hasStory: !!parsed.story,
+              quizCompleted: parsed.quizCompleted
+            })
+            // 恢复后直接返回，不继续检查其他条件
+            return
+          }
+          // 情况2：只有selectedCharacter但没有story → 恢复角色选择状态
+          else if (parsed.selectedCharacter && !parsed.story) {
+            console.log('检测到角色选择但未生成story，恢复角色选择状态...')
+            setSelectedCharacter(parsed.selectedCharacter)
+            if (parsed.selectedSetting) {
+              setSelectedSetting(parsed.selectedSetting)
+            }
+            // 保持status为'idle'，显示角色选择界面
+            setStatus('idle')
+            console.log('已恢复角色选择状态')
+            // 恢复后直接返回，不继续检查其他条件
+            return
+          }
           // 验证 testWords 是否匹配（允许部分匹配）
-          if (parsed.testWords && Array.isArray(parsed.testWords) && parsed.testWords.length > 0) {
+          else if (parsed.testWords && Array.isArray(parsed.testWords) && parsed.testWords.length > 0) {
             // 检查是否有重叠的单词
             const savedWords = new Set<string>(parsed.testWords.map((w: any) => (w.word?.toLowerCase() || '').toString()))
             const currentWords = new Set<string>(testWords.map(w => w.word.toLowerCase()))
@@ -228,8 +268,13 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
               }
               if (parsed.story) {
                 setStory(parsed.story)
-              }
-              if (parsed.status) {
+                // 如果story存在且quiz未完成，确保status是'success'以显示文章
+                if (!parsed.quizCompleted && parsed.story) {
+                  setStatus('success')
+                } else if (parsed.status) {
+                  setStatus(parsed.status)
+                }
+              } else if (parsed.status) {
                 setStatus(parsed.status)
               }
               
@@ -237,32 +282,17 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
                 hasCharacter: !!parsed.selectedCharacter,
                 hasSetting: !!parsed.selectedSetting,
                 hasStory: !!parsed.story,
-                status: parsed.status
+                status: parsed.status,
+                quizCompleted: parsed.quizCompleted
               })
             } else {
-              // testWords 不匹配，但如果只有角色选择状态（没有故事），仍然保留
-              // 这样可以支持用户在不同测试会话中继续选择角色
-              if (parsed.selectedCharacter && !parsed.story) {
-                // 只恢复角色选择，清除其他不匹配的数据
-                setSelectedCharacter(parsed.selectedCharacter)
-                if (parsed.selectedSetting) {
-                  setSelectedSetting(parsed.selectedSetting)
-                }
-                // 更新 testWords 为当前值
-                const updatedProgress = {
-                  ...parsed,
-                  testWords,
-                  timestamp: Date.now()
-                }
-                localStorage.setItem('reading_progress', JSON.stringify(updatedProgress))
-                console.log('已恢复角色选择状态（testWords已更新）')
-              } else {
-                // testWords 不匹配且已有故事，清除旧进度
-                localStorage.removeItem('reading_progress')
-              }
+              // testWords 不匹配，清除旧进度
+              console.log('testWords不匹配，清除旧进度')
+              localStorage.removeItem('reading_progress')
             }
           } else {
-            // 没有 testWords，清除旧进度
+            // 没有 testWords 且没有其他有效状态，清除旧进度
+            console.log('没有testWords且没有其他有效状态，清除旧进度')
             localStorage.removeItem('reading_progress')
           }
         } else {
@@ -278,17 +308,25 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
     }
   }, [testWords, hasRestoredProgress])
 
-  // 当状态改变时保存进度
+  // 当状态改变时保存进度（标记quiz未完成，除非明确完成）
   useEffect(() => {
     if (hasRestoredProgress) {
-      saveReadingProgress()
+      // 如果story存在，保存进度时标记quizCompleted为false（默认未完成）
+      // 只有在quiz明确完成时才会清除进度
+      const quizCompleted = false // 默认未完成，只有在明确完成时才清除
+      saveReadingProgress(false, quizCompleted)
+      console.log('保存阅读进度', {
+        hasStory: !!story,
+        status,
+        quizCompleted
+      })
     }
   }, [selectedCharacter, selectedSetting, story, status, saveReadingProgress, hasRestoredProgress])
 
-  // 页面关闭前保存进度
+  // 页面关闭前保存进度（标记quiz未完成）
   useEffect(() => {
     const handleBeforeUnload = () => {
-      saveReadingProgress()
+      saveReadingProgress(false, false) // 保存进度，标记quiz未完成
     }
     
     if (typeof window !== 'undefined') {
@@ -350,42 +388,121 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
         
         if (imageResponse.ok) {
           const imageResult = await imageResponse.json()
+          console.log('图片生成结果:', { hasImageUrl: !!imageResult.imageUrl, hasImageData: !!imageResult.imageData })
           if (imageResult.imageUrl) {
+            // 如果已经有URL，直接使用
             imageUrl = imageResult.imageUrl
+            console.log('使用已有的imageUrl:', imageUrl)
           } else if (imageResult.imageData) {
+            // 如果有base64数据，先使用base64显示，然后异步上传OSS
             imageData = imageResult.imageData
             imageMimeType = imageResult.mimeType || 'image/png'
             
-            // 上传base64图片到OSS
-            try {
-              // 将base64转换为Blob
-              const byteCharacters = atob(imageResult.imageData)
-              const byteNumbers = new Array(byteCharacters.length)
-              for (let i = 0; i < byteCharacters.length; i++) {
-                byteNumbers[i] = byteCharacters.charCodeAt(i)
+            // 异步上传base64图片到OSS（不阻塞UI）
+            // 先显示故事，然后后台上传
+            console.log('开始异步上传图片到OSS...')
+            ;(async () => {
+              try {
+                // 将base64转换为Blob
+                const byteCharacters = atob(imageResult.imageData)
+                const byteNumbers = new Array(byteCharacters.length)
+                for (let i = 0; i < byteCharacters.length; i++) {
+                  byteNumbers[i] = byteCharacters.charCodeAt(i)
+                }
+                const byteArray = new Uint8Array(byteNumbers)
+                const blob = new Blob([byteArray], { type: imageResult.mimeType || 'image/png' })
+                console.log('Blob创建成功，大小:', blob.size)
+                
+                // 创建FormData上传到OSS
+                const formData = new FormData()
+                formData.append('file', blob, `story-${Date.now()}.png`)
+                
+                // 异步上传OSS（不阻塞）
+                console.log('发送OSS上传请求...')
+                const uploadResponse = await fetch('/api/upload-oss', {
+                  method: 'POST',
+                  body: formData,
+                })
+                console.log('OSS上传响应状态:', uploadResponse.status, uploadResponse.ok)
+                
+                if (uploadResponse.ok) {
+                  const uploadResult = await uploadResponse.json()
+                  const ossUrl = uploadResult.url
+                  console.log('图片已成功上传到OSS:', ossUrl)
+                  
+                  // 上传成功后，更新story状态，使用OSS URL替换base64
+                  setStory(prevStory => {
+                    if (prevStory) {
+                      return {
+                        ...prevStory,
+                        imageUrl: ossUrl,
+                        imageData: undefined, // 清空base64数据
+                        imageMimeType: undefined,
+                      }
+                    }
+                    return prevStory
+                  })
+                  
+                  // OSS上传成功后，保存文章到图书馆（此时imageUrl已确定）
+                  if (onSaveArticle) {
+                    const htmlContent = generateHtmlContent(result.title, result.content, result.quiz || [], ossUrl)
+                    onSaveArticle({
+                      title: result.title,
+                      content: result.content,
+                      htmlContent,
+                      imageUrl: ossUrl, // 使用OSS URL
+                      quiz: result.quiz,
+                      character: selectedCharacter,
+                      setting: selectedSetting,
+                    }).then(() => {
+                      console.log('文章已保存到图书馆，图片URL:', ossUrl)
+                    }).catch((err) => {
+                      console.error('保存文章到图书馆失败:', err)
+                    })
+                  }
+                } else {
+                  const errorData = await uploadResponse.json().catch(() => ({ error: 'Upload failed' }))
+                  console.error('上传图片到OSS失败:', errorData)
+                  // 上传失败时，仍然保存文章（没有图片URL）
+                  if (onSaveArticle) {
+                    console.log('OSS上传失败，保存文章（无图片URL）')
+                    const htmlContent = generateHtmlContent(result.title, result.content, result.quiz || [], undefined)
+                    onSaveArticle({
+                      title: result.title,
+                      content: result.content,
+                      htmlContent,
+                      imageUrl: undefined, // OSS上传失败，没有URL
+                      quiz: result.quiz,
+                      character: selectedCharacter,
+                      setting: selectedSetting,
+                    }).then(() => {
+                      console.log('文章已保存到图书馆（OSS上传失败，无图片URL）')
+                    }).catch((err) => {
+                      console.error('保存文章到图书馆失败:', err)
+                    })
+                  }
+                }
+              } catch (uploadError) {
+                console.error('上传图片到OSS异常:', uploadError)
+                // 上传异常时，仍然保存文章（没有图片URL）
+                if (onSaveArticle) {
+                  const htmlContent = generateHtmlContent(result.title, result.content, result.quiz || [], undefined)
+                  onSaveArticle({
+                    title: result.title,
+                    content: result.content,
+                    htmlContent,
+                    imageUrl: undefined, // OSS上传异常，没有URL
+                    quiz: result.quiz,
+                    character: selectedCharacter,
+                    setting: selectedSetting,
+                  }).then(() => {
+                    console.log('文章已保存到图书馆（OSS上传异常，无图片URL）')
+                  }).catch((err) => {
+                    console.error('保存文章到图书馆失败:', err)
+                  })
+                }
               }
-              const byteArray = new Uint8Array(byteNumbers)
-              const blob = new Blob([byteArray], { type: imageResult.mimeType || 'image/png' })
-              
-              // 创建FormData上传到OSS
-              const formData = new FormData()
-              formData.append('file', blob, `story-${Date.now()}.png`)
-              
-              const uploadResponse = await fetch('/api/upload-oss', {
-                method: 'POST',
-                body: formData,
-              })
-              
-              if (uploadResponse.ok) {
-                const uploadResult = await uploadResponse.json()
-                imageUrl = uploadResult.url
-                // 清空base64数据，使用OSS URL
-                imageData = undefined
-              }
-            } catch (uploadError) {
-              console.error('上传图片到OSS失败:', uploadError)
-              // 上传失败不影响，继续使用base64
-            }
+            })()
           }
         }
       } catch (imageError) {
@@ -393,36 +510,91 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
         // 图片生成失败不影响故事显示
       }
       
-      // 生成HTML内容
-      const htmlContent = generateHtmlContent(result.title, result.content, result.quiz || [], imageUrl)
+      // 无论图片生成成功与否，都要保存文章
+      // 如果图片生成失败，保存时imageUrl为undefined
+      // 如果图片生成成功但OSS上传失败，也会在失败回调中保存
+      // 如果图片生成成功且OSS上传成功，会在上传成功回调中保存
+      // 但为了确保文章一定会被保存，我们在这里也添加一个兜底保存逻辑
       
-      // 保存文章到图书馆（后台异步保存，不阻塞UI）
-      if (onSaveArticle) {
-        onSaveArticle({
-          title: result.title,
-          content: result.content,
-          htmlContent,
-          imageUrl,
-          quiz: result.quiz,
-          character: selectedCharacter,
-          setting: selectedSetting,
-        }).catch((err) => {
-          console.error('保存文章到图书馆失败:', err)
-          // 保存失败不影响故事显示
-        })
-      }
-      
+      // 先显示故事（使用base64图片，如果存在）
       setStory({
         title: result.title,
         content: result.content,
         quiz: result.quiz,
         isGenerated: true,
         timestamp: Date.now(),
-        imageUrl,
-        imageData,
+        imageUrl, // 如果有URL就用URL，否则用base64
+        imageData, // base64数据，用于立即显示
         imageMimeType,
       })
       setStatus('success')
+      
+      // 保存文章到图书馆的逻辑
+      // 策略：等待OSS上传完成后再保存，确保imageUrl正确
+      const saveArticleToLibrary = async (finalImageUrl?: string) => {
+        if (!onSaveArticle) {
+          console.warn('⚠️ onSaveArticle未定义，无法保存文章')
+          return
+        }
+        
+        const htmlContent = generateHtmlContent(result.title, result.content, result.quiz || [], finalImageUrl)
+        
+        try {
+          console.log('开始保存文章到图书馆，imageUrl:', finalImageUrl || '无')
+          await onSaveArticle({
+            title: result.title,
+            content: result.content,
+            htmlContent,
+            imageUrl: finalImageUrl, // 使用最终的OSS URL
+            quiz: result.quiz,
+            character: selectedCharacter,
+            setting: selectedSetting,
+          })
+          console.log('✅ 文章已保存到图书馆，图片URL:', finalImageUrl || '无图片')
+        } catch (err) {
+          console.error('❌ 保存文章到图书馆失败:', err)
+          // 保存失败不影响故事显示
+        }
+      }
+      
+      // 保存文章到图书馆的逻辑
+      // 如果已经有imageUrl（直接返回的URL），立即保存
+      if (imageUrl) {
+        saveArticleToLibrary(imageUrl)
+      } else if (imageData) {
+        // 如果有base64数据，等待OSS上传完成后再保存
+        // 上传逻辑在异步函数中，上传成功后会调用onSaveArticle
+        // 如果OSS上传失败，也要保存文章（使用base64或没有图片）
+        console.log('等待OSS上传完成后再保存文章...')
+        
+        // 设置超时，如果OSS上传超时（30秒），仍然保存文章（可能没有图片URL）
+        setTimeout(async () => {
+          // 检查是否已经保存过（通过检查story状态）
+          // 如果OSS上传成功，应该已经保存了
+          // 如果超时，说明OSS上传可能失败，仍然保存文章
+          if (onSaveArticle) {
+            console.log('OSS上传超时，保存文章（可能没有图片URL）')
+            const htmlContent = generateHtmlContent(result.title, result.content, result.quiz || [], undefined)
+            try {
+              await onSaveArticle({
+                title: result.title,
+                content: result.content,
+                htmlContent,
+                imageUrl: undefined, // OSS上传失败，没有URL
+                quiz: result.quiz,
+                character: selectedCharacter,
+                setting: selectedSetting,
+              })
+              console.log('文章已保存到图书馆（无图片URL）')
+            } catch (err) {
+              console.error('保存文章到图书馆失败:', err)
+            }
+          }
+        }, 30000) // 30秒超时
+      } else {
+        // 没有图片，直接保存
+        saveArticleToLibrary()
+      }
     } catch (err: any) {
       console.error(err)
       setErrorMsg(err.message || "Oops! We couldn't write the story right now. Please try again.")
@@ -485,7 +657,12 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
         </motion.div>
 
         {status === 'success' && story ? (
-          <StoryDisplay story={story} testWords={testWords} onReset={handleReset} />
+          <StoryDisplay 
+            story={story} 
+            testWords={testWords} 
+            onReset={handleReset}
+            onQuizComplete={() => saveReadingProgress(true, true)} // Quiz完成后清除阅读进度
+          />
         ) : (
           <div className="space-y-8">
             {/* 角色选择 */}
@@ -643,11 +820,13 @@ function SelectionCard({ item, isSelected, onSelect }: {
 function StoryDisplay({ 
   story, 
   testWords, 
-  onReset 
+  onReset,
+  onQuizComplete
 }: { 
   story: StoryState
   testWords: Array<{ id: number; word: string; translation: string }>
-  onReset: () => void 
+  onReset: () => void
+  onQuizComplete?: () => void
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -691,10 +870,10 @@ function StoryDisplay({
     }
   }, [testWords])
 
-  // 查询单词翻译（从数据库）
+  // 查询单词翻译（使用在线翻译服务）
   const lookupWordTranslation = useCallback(async (word: string): Promise<string | null> => {
     try {
-      const response = await fetch(`/api/word-lookup?word=${encodeURIComponent(word)}`)
+      const response = await fetch(`/api/translate?word=${encodeURIComponent(word)}&lang=zh`)
       if (response.ok) {
         const data = await response.json()
         return data.translation || null
@@ -1088,7 +1267,7 @@ function StoryDisplay({
 
           {/* 测验模块 */}
           {story.quiz && story.quiz.length > 0 && (
-            <QuizModule questions={story.quiz} />
+            <QuizModule questions={story.quiz} onQuizComplete={onQuizComplete} />
           )}
         </div>
       </div>
@@ -1097,7 +1276,7 @@ function StoryDisplay({
 }
 
 // QuizModule 组件
-function QuizModule({ questions }: { questions: QuizQuestion[] }) {
+function QuizModule({ questions, onQuizComplete }: { questions: QuizQuestion[], onQuizComplete?: () => void }) {
   const [userAnswers, setUserAnswers] = useState<number[]>(new Array(questions.length).fill(-1))
   const [isSubmitted, setIsSubmitted] = useState(false)
 
@@ -1120,6 +1299,13 @@ function QuizModule({ questions }: { questions: QuizQuestion[] }) {
       return
     }
     setIsSubmitted(true)
+    // Quiz完成后，通知父组件清除阅读进度
+    if (onQuizComplete) {
+      // 延迟一下，让用户看到分数
+      setTimeout(() => {
+        onQuizComplete()
+      }, 2000) // 2秒后清除进度
+    }
   }
 
   const getOptionStyle = (qIndex: number, optIndex: number) => {

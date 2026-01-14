@@ -85,11 +85,26 @@ export default function Home() {
         const parsed = JSON.parse(saved)
         // 检查时间戳（24小时内有效）
         if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
-          // 验证是否有 testWords 或 selectedCharacter（支持只选择了角色的情况）
-          if ((parsed.testWords && Array.isArray(parsed.testWords) && parsed.testWords.length > 0) ||
-              (parsed.selectedCharacter && !parsed.story)) {
-            // 如果有角色选择但还没有生成故事，也返回进度（允许恢复角色选择界面）
+          // 情况1：有story且quiz未完成 → 返回进度（恢复文章阅读界面）
+          if (parsed.story && !parsed.quizCompleted) {
+            console.log('checkReadingProgress: 检测到未完成的story，返回进度')
             return parsed
+          }
+          // 情况2：有testWords → 返回进度（恢复阅读状态，可能是角色选择或文章生成）
+          if (parsed.testWords && Array.isArray(parsed.testWords) && parsed.testWords.length > 0) {
+            console.log('checkReadingProgress: 检测到testWords，返回进度')
+            return parsed
+          }
+          // 情况3：只有selectedCharacter但没有story → 返回进度（恢复角色选择界面）
+          if (parsed.selectedCharacter && !parsed.story) {
+            console.log('checkReadingProgress: 检测到角色选择但未生成story，返回进度')
+            return parsed
+          }
+          // 情况4：有story但quiz已完成 → 清除进度（应该回到dashboard）
+          if (parsed.story && parsed.quizCompleted) {
+            console.log('checkReadingProgress: story已完成quiz，清除进度')
+            localStorage.removeItem('reading_progress')
+            return null
           }
         } else {
           // 超过24小时，清除旧进度
@@ -175,15 +190,24 @@ export default function Home() {
   useEffect(() => {
     const fetchProfile = async () => {
       // 各种卫语句：如果没有用户，或者已经有资料，或者正在获取，都直接退出
-      if (!user) return
+      if (!user) {
+        // 如果没有用户，确保loading为false（显示登录页）
+        return
+      }
       if (userProfile) {
         setLoading(false)
         return
       }
-      if (isFetchingProfile.current) return
+      if (isFetchingProfile.current) {
+        // 如果正在获取，保持loading状态
+        return
+      }
 
       try {
         isFetchingProfile.current = true
+        // 确保在开始获取时loading为true（防止短暂显示错误页面）
+        setLoading(true)
+        setProfileError(false) // 重置错误状态
         console.log('🚀 开始获取用户资料...')
         
         // 直接请求，移除所有人为超时限制
@@ -222,16 +246,38 @@ export default function Home() {
               const readingProgress = checkReadingProgress(user.id)
               if (readingProgress) {
                 // 恢复阅读状态
-                // 如果有 testWords，恢复它们；如果没有但 selectedCharacter 存在，也跳转到 storyspark（StorySpark 会自己恢复状态）
-                if (readingProgress.testWords && Array.isArray(readingProgress.testWords) && readingProgress.testWords.length > 0) {
+                // 情况1：有story且quiz未完成 → 跳转到storyspark显示文章
+                if (readingProgress.story && !readingProgress.quizCompleted) {
+                  console.log('恢复未完成的story，跳转到storyspark显示文章')
+                  if (readingProgress.testWords && Array.isArray(readingProgress.testWords) && readingProgress.testWords.length > 0) {
+                    setTestWords(readingProgress.testWords.map((w: any) => ({
+                      id: w.id || 0,
+                      word: w.word,
+                      translation: w.translation
+                    })))
+                  }
+                  setAppStage('storyspark')
+                }
+                // 情况2：有testWords → 跳转到storyspark（StorySpark会自己恢复状态，可能是角色选择或文章生成）
+                else if (readingProgress.testWords && Array.isArray(readingProgress.testWords) && readingProgress.testWords.length > 0) {
+                  console.log('恢复testWords，跳转到storyspark')
                   setTestWords(readingProgress.testWords.map((w: any) => ({
                     id: w.id || 0,
                     word: w.word,
                     translation: w.translation
                   })))
+                  setAppStage('storyspark')
                 }
-                // 即使没有 testWords，只要有 selectedCharacter，也跳转到 storyspark（允许恢复角色选择界面）
-                setAppStage('storyspark')
+                // 情况3：只有selectedCharacter但没有story → 跳转到storyspark显示角色选择界面
+                else if (readingProgress.selectedCharacter && !readingProgress.story) {
+                  console.log('恢复角色选择状态，跳转到storyspark显示角色选择')
+                  setAppStage('storyspark')
+                }
+                // 其他情况，回到dashboard
+                else {
+                  console.log('阅读进度不符合恢复条件，回到dashboard')
+                  setAppStage('dashboard')
+                }
               } else if (checkTestProgress(user.id)) {
                 setAppStage('challenge')
               } else {
@@ -239,13 +285,55 @@ export default function Home() {
               }
             }
           }
+          // 只有在成功获取profile后才结束loading
+          setLoading(false)
+        } else if (error && error.code !== 'PGRST116') {
+          // 只有在真正的错误时才结束loading并显示错误
+          setProfileError(true)
+          setLoading(false)
+        } else {
+          // 如果是PGRST116（记录不存在），可能是新用户，等待一下再重试
+          // 注意：这里不设置loading=false，保持loading状态，等待重试完成
+          console.log('⚠️ 用户资料不存在，可能是新用户，等待重试...')
+          setTimeout(async () => {
+            if (!userProfile && user && !isFetchingProfile.current) {
+              // 重试一次
+              isFetchingProfile.current = true
+              try {
+                const { data: retryProfile, error: retryError } = await profiles.get(user.id)
+                if (retryProfile) {
+                  setUserProfile(retryProfile)
+                  setProfileError(false)
+                  // 设置默认路由
+                  if (retryProfile.role === 'child') {
+                    setAppStage('dashboard')
+                  }
+                  setLoading(false)
+                } else if (retryError && retryError.code !== 'PGRST116') {
+                  // 真正的错误
+                  setProfileError(true)
+                  setLoading(false)
+                } else {
+                  // 仍然不存在，可能是新用户，显示错误但允许继续
+                  setProfileError(true)
+                  setLoading(false)
+                }
+              } catch (retryErr) {
+                console.error('重试获取资料异常:', retryErr)
+                setProfileError(true)
+                setLoading(false)
+              } finally {
+                isFetchingProfile.current = false
+              }
+            }
+          }, 1000) // 等待1秒后重试
         }
       } catch (err) {
         console.error('获取资料发生异常:', err)
         setProfileError(true)
+        setLoading(false) // 异常时结束loading
       } finally {
         isFetchingProfile.current = false
-        setLoading(false) // 无论成功失败，都结束 Loading
       }
     }
 
@@ -521,7 +609,9 @@ const handleLogout = async (force: boolean = false) => {
     )
   }
 
-  if (user && (!userProfile || profileError)) {
+  // 只有在loading为false且确实有错误时才显示错误页面
+  // 如果还在loading，应该显示loading页面，而不是错误页面
+  if (!loading && user && (!userProfile || profileError)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-red-50 p-6 text-center">
         <div className="text-4xl mb-4">⚠️</div>

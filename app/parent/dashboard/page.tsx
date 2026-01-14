@@ -64,24 +64,33 @@ export default function ParentDashboard() {
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
-  // 检查认证状态
+  // 检查认证状态（优化：先显示框架，再加载数据）
   useEffect(() => {
     const checkAuth = async () => {
       const { user: currentUser } = await auth.getCurrentUser()
       if (currentUser) {
         setUser(currentUser)
-        const { data: profile } = await profiles.get(currentUser.id)
-        if (profile && profile.role === 'parent') {
-          setUserProfile(profile)
-          // 获取关联的孩子
-          const { data: childrenData } = await profiles.getChildren(currentUser.id)
-          if (childrenData && childrenData.length > 0) {
-            setChildren(childrenData)
-            setSelectedChildId(childrenData[0].id)
-            setSelectedChild(childrenData[0])
-          }
-        }
+        // 先设置loading为false，显示dashboard框架
         setLoading(false)
+        
+        // 异步加载profile和children数据（不阻塞UI）
+        ;(async () => {
+          try {
+            const { data: profile } = await profiles.get(currentUser.id)
+            if (profile && profile.role === 'parent') {
+              setUserProfile(profile)
+              // 获取关联的孩子
+              const { data: childrenData } = await profiles.getChildren(currentUser.id)
+              if (childrenData && childrenData.length > 0) {
+                setChildren(childrenData)
+                setSelectedChildId(childrenData[0].id)
+                setSelectedChild(childrenData[0])
+              }
+            }
+          } catch (error) {
+            console.error('加载用户数据失败:', error)
+          }
+        })()
       } else {
         setLoading(false)
       }
@@ -101,10 +110,22 @@ export default function ParentDashboard() {
     }
   }, [])
 
-// 加载仪表盘数据 (RPC 一站式版本)
+// 加载仪表盘数据 (优化：先显示看板，再异步加载数据)
 useEffect(() => {
-    if (!selectedChildId || !userProfile) return
+    if (!selectedChildId) return
 
+    // 先初始化空数据，立即显示看板框架
+    if (!dashboardData) {
+      setDashboardData({
+        todayReviewed: 0,
+        totalMastered: 0,
+        weeklyStats: [],
+        topErrorWords: []
+      })
+      setDataLoading(false) // 先显示看板，不显示加载状态
+    }
+
+    // 异步加载数据（不阻塞UI）
     const loadDashboardData = async () => {
       setDataLoading(true)
       try {
@@ -139,7 +160,7 @@ useEffect(() => {
     }
 
     loadDashboardData()
-  }, [selectedChildId, userProfile, selectedChild]) // 增加 selectedChild 依赖
+  }, [selectedChildId, selectedChild]) // 移除 userProfile 依赖，允许在userProfile加载前就开始加载数据
 
   // 处理退出登录
   const handleLogout = async () => {
@@ -230,7 +251,8 @@ useEffect(() => {
     )
   }
 
-  if (!user || !userProfile || userProfile.role !== 'parent') {
+  // 如果用户未登录，显示提示
+  if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
         <div className="text-center">
@@ -246,7 +268,25 @@ useEffect(() => {
     )
   }
 
-  if (children.length === 0) {
+  // 如果profile已加载且不是家长，显示提示（但允许在加载前显示框架）
+  if (userProfile && userProfile.role !== 'parent') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600 mb-4">请先登录家长账号</p>
+          <button
+            onClick={() => window.location.href = '/'}
+            className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600"
+          >
+            返回首页
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // 如果children已加载且为空，显示提示（但允许在加载前显示框架）
+  if (userProfile && children.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
         <div className="text-center bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-sm">
@@ -263,6 +303,7 @@ useEffect(() => {
   }
 
   const childName = selectedChild?.email?.split('@')[0] || '孩子'
+  const parentName = userProfile?.email?.split('@')[0] || '家长'
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-6 font-quicksand">
@@ -271,7 +312,7 @@ useEffect(() => {
         <div className="flex justify-between items-center bg-white/80 backdrop-blur-sm rounded-3xl p-6 shadow-sm">
           <div>
             <h1 className="text-3xl font-bold text-gray-800 mb-2">
-              欢迎回来，{userProfile.email?.split('@')[0] || '家长'} 👋
+              欢迎回来，{parentName} 👋
             </h1>
             <p className="text-gray-600">监控孩子的学习进度</p>
           </div>
@@ -320,11 +361,12 @@ useEffect(() => {
         </div>
       </div>
 
-      {/* 主要内容区域 */}
+      {/* 主要内容区域 - 始终显示看板框架，数据加载时显示加载状态 */}
       <div className="max-w-7xl mx-auto">
-        {dataLoading ? (
+        {/* 如果数据正在加载且没有初始数据，显示骨架屏 */}
+        {dataLoading && !dashboardData ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {[1, 2, 3, 4].map(i => (
+            {[1, 2, 3, 4, 5, 6].map(i => (
               <SkeletonCard key={i} />
             ))}
           </div>
@@ -661,9 +703,14 @@ useEffect(() => {
 
           </div>
         )}
+        {/* 数据加载指示器（在右上角显示，当数据正在更新时） */}
+        {dataLoading && dashboardData && (
+          <div className="fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2">
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-sm">正在更新数据...</span>
+          </div>
+        )}
       </div>
-
-
 
       <WordHistoryModal 
   isOpen={isHistoryOpen} 
