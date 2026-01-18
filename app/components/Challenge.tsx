@@ -398,18 +398,28 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
         isCompletedRef.current = true
         clearTestProgress()
         
+        // 确保所有测试的单词都被包含
+        const allTestWords = testWords.map(w => {
+          const wordResult = currentWordResults.get(w.id) || { translationError: false, spellingError: false }
+          return {
+            id: w.id,
+            word: w.word,
+            translation: w.translation,
+            translationError: wordResult.translationError,
+            spellingError: wordResult.spellingError,
+          }
+        })
+        
+        console.log('📝 测试完成，准备传递结果:', {
+          testWordsCount: testWords.length,
+          allTestWordsCount: allTestWords.length,
+          wordIds: allTestWords.map(w => w.id),
+          wordNames: allTestWords.map(w => w.word)
+        })
+        
         onComplete({
           ...currentResults, // ✅ 使用最新的 results
-          testWords: testWords.map(w => {
-            const wordResult = currentWordResults.get(w.id) || { translationError: false, spellingError: false }
-            return {
-              id: w.id,
-              word: w.word,
-              translation: w.translation,
-              translationError: wordResult.translationError,
-              spellingError: wordResult.spellingError,
-            }
-          })
+          testWords: allTestWords
         })
       }
     }

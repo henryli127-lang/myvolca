@@ -469,48 +469,132 @@ const handleLogout = async (force: boolean = false) => {
   }
 
   const handleChallengeComplete = async (results: TestResults) => {
+    console.log('📝 测试完成，开始处理结果:', { 
+      hasResults: !!results, 
+      testWordsCount: results?.testWords?.length || 0,
+      userId: user?.id 
+    })
+
     try {
-      if (!results || !results.testWords) return
+      if (!results || !results.testWords) {
+        console.error('❌ 测试结果无效:', { results, hasTestWords: !!results?.testWords })
+        return
+      }
+
+      // 验证 testWords 数据完整性
+      const validTestWords = results.testWords.filter(word => {
+        const isValid = word && typeof word.id === 'number' && word.id > 0
+        if (!isValid) {
+          console.warn('⚠️ 无效的单词数据:', word)
+        }
+        return isValid
+      })
+
+      if (validTestWords.length === 0) {
+        console.error('❌ 没有有效的测试单词')
+        return
+      }
+
+      console.log(`✅ 验证通过，有效单词数: ${validTestWords.length}/${results.testWords.length}`)
+
+      // 1. 先保存测试结果到数据库（等待完成，避免卡住）
+      if (user && validTestWords.length > 0) {
+        console.log('💾 开始保存测试结果到数据库...')
+        console.log(`📋 需要保存的单词列表:`, validTestWords.map(w => ({ id: w.id, word: w.word })))
+        
+        try {
+          const saveResults = await Promise.allSettled(validTestWords.map(async (word, index) => {
+            const transErrorCount = word.translationError ? 1 : 0
+            const spellErrorCount = word.spellingError ? 1 : 0
+            // 根据是否有错误决定status：如果有错误则保持'learning'，如果没有错误则标记为'mastered'
+            const status = (transErrorCount === 0 && spellErrorCount === 0) ? 'mastered' : 'learning'
+            
+            console.log(`  [${index + 1}/${validTestWords.length}] 保存单词: ID=${word.id}, word="${word.word}", errors=${transErrorCount + spellErrorCount}, status=${status}`)
+            
+            const { data, error } = await userProgress.updateTestResults(word.id, transErrorCount, spellErrorCount, status)
+            
+            if (error) {
+              console.error(`  ❌ 保存单词 ${word.id} (${word.word}) 失败:`, error)
+              return { wordId: word.id, word: word.word, success: false, error }
+            } else {
+              console.log(`  ✅ 单词 ${word.id} (${word.word}) 保存成功`, data ? '返回数据' : '无返回数据')
+              return { wordId: word.id, word: word.word, success: true, error: null }
+            }
+          }))
+          
+          // 统计保存结果
+          const successCount = saveResults.filter(r => r.status === 'fulfilled' && r.value.success).length
+          const failedCount = saveResults.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)).length
+          
+          console.log(`📊 保存结果统计: 成功 ${successCount}/${validTestWords.length}, 失败 ${failedCount}/${validTestWords.length}`)
+          
+          // 打印失败的单词详情
+          saveResults.forEach((result, index) => {
+            if (result.status === 'rejected') {
+              console.error(`  ❌ 单词 ${validTestWords[index].id} (${validTestWords[index].word}) 保存异常:`, result.reason)
+            } else if (!result.value.success) {
+              console.error(`  ❌ 单词 ${result.value.wordId} (${result.value.word}) 保存失败:`, result.value.error)
+            }
+          })
+          
+          if (failedCount > 0) {
+            console.warn(`⚠️ 有 ${failedCount} 个单词保存失败，请检查数据库连接和RPC函数`)
+          } else {
+            console.log('✅ 所有测试结果已成功保存到数据库')
+          }
+        } catch (err) {
+          console.error('❌ 保存测试结果时发生异常:', err)
+          // 即使保存失败，也继续显示成绩单
+        }
+      } else {
+        console.warn('⚠️ 跳过保存：', { hasUser: !!user, validTestWordsCount: validTestWords.length })
+      }
+
+      // 2. 更新 UI 状态（使用验证后的数据）
       setTestResults(results)
-      setTestWords(results.testWords)
+      setTestWords(validTestWords)
       setSessionKey(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
-      setAppStage('report')
       
-      // 保存成绩单状态到 localStorage，以便退出后再次登录能恢复
+      // 3. 保存成绩单状态到 localStorage，以便退出后再次登录能恢复
       if (typeof window !== 'undefined' && user) {
         try {
           const reportProgressKey = `report_progress_${user.id}`
           localStorage.setItem(reportProgressKey, JSON.stringify({
             testResults: results,
-            testWords: results.testWords,
+            testWords: validTestWords, // 使用验证后的数据
             timestamp: Date.now()
           }))
+          console.log('✅ 成绩单进度已保存到 localStorage')
         } catch (error) {
-          console.error('保存成绩单进度失败:', error)
+          console.error('❌ 保存成绩单进度失败:', error)
         }
       }
-    } catch (error) {
-      console.error('更新 UI 状态失败:', error)
+
+      // 4. 清除测试进度缓存
+      if (typeof window !== 'undefined' && user) {
+        try {
+          localStorage.removeItem(`test_progress_${user.id}`)
+          localStorage.removeItem(`word_list_${user.id}`)
+          localStorage.removeItem(`learning_progress_${user.id}`)
+          console.log('✅ 测试进度缓存已清除')
+        } catch (error) { 
+          console.error('⚠️ 清除缓存失败:', error) 
+        }
+      }
+
+      // 5. 最后跳转到成绩单页面
+      console.log('📊 跳转到成绩单页面...')
       setAppStage('report')
-    }
-
-    if (typeof window !== 'undefined' && user) {
-      try {
-        localStorage.removeItem(`test_progress_${user.id}`)
-        localStorage.removeItem(`word_list_${user.id}`)
-        localStorage.removeItem(`learning_progress_${user.id}`)
-      } catch (error) { console.error('清除缓存失败:', error) }
-    }
-
-    if (user && results.testWords) {
-      Promise.all(results.testWords.map(async (word) => {
-        const transErrorCount = word.translationError ? 1 : 0
-        const spellErrorCount = word.spellingError ? 1 : 0
-        // 根据是否有错误决定status：如果有错误则保持'learning'，如果没有错误则标记为'mastered'
-        const status = (transErrorCount === 0 && spellErrorCount === 0) ? 'mastered' : 'learning'
-        // 更新所有单词的测试结果（包括没有错误的单词）
-        await userProgress.updateTestResults(word.id, transErrorCount, spellErrorCount, status)
-      })).catch((err) => console.error('❌ 保存测试结果失败:', err))
+      console.log('✅ 测试完成处理完毕')
+      
+    } catch (error) {
+      console.error('❌ 处理测试完成时发生错误:', error)
+      // 即使出错，也尝试跳转到成绩单页面
+      if (results && results.testWords) {
+        setTestResults(results)
+        setTestWords(results.testWords)
+      }
+      setAppStage('report')
     }
   }
 
