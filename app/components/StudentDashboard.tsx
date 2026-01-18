@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { profiles, words } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
@@ -21,8 +21,19 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
   const [loading, setLoading] = useState(true)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
 
+  // 使用 ref 防止重复执行
+  const hasLoadedData = useRef(false)
+
   useEffect(() => {
+    // 如果已经加载过数据，直接返回
+    if (hasLoadedData.current) {
+      console.log('📊 StudentDashboard: 数据已加载，跳过')
+      setLoading(false)
+      return
+    }
+
     const loadDashboardData = async () => {
+      console.log('📊 StudentDashboard: 开始加载数据')
       try {
         // 1. 获取基础数据（先显示出来）
         const streak = userProfile?.streak_days || 0
@@ -51,7 +62,9 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
         }
 
         // 3. 🚀 关键优化：此时 UI 数据已准备好，立即结束 loading，不要等待下面的 DB 更新
+        hasLoadedData.current = true
         setLoading(false)
+        console.log('📊 StudentDashboard: 数据加载完成')
 
         // 4. 【后台】更新登录信息（Fire and forget 或非阻塞更新）
         if (userProfile) {
@@ -109,7 +122,7 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
     }
 
     loadDashboardData()
-  }, [user, userProfile])
+  }, [user.id, userProfile?.streak_days, userProfile?.last_login_at]) // 只依赖具体字段，避免对象引用变化导致重复执行
 
   if (loading) {
     return (

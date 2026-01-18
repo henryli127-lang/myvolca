@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { auth, profiles, studyLogs, userProgress, articles, supabase } from '@/lib/supabase'
 import Auth from './components/Auth'
@@ -152,24 +152,30 @@ export default function Home() {
     let mounted = true
 
     // 初始化检查
+    console.log('🔍 page.tsx: 开始检查 session...')
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!mounted) return
+      console.log('🔍 page.tsx: getSession 结果:', session ? '有 session' : '无 session')
       if (session?.user) {
+        console.log('🔍 page.tsx: 设置 user (来自 getSession)')
         setUser(session.user)
         // 注意：这里不设 loading false，等待 Profile 获取完再设
       } else {
+        console.log('🔍 page.tsx: 无 session，结束 loading 显示登录页')
         setLoading(false) // 没有用户，直接结束 loading 显示登录页
       }
     })
 
     const { data: { subscription } } = auth.onAuthStateChange((event, session) => {
       if (!mounted) return
-      console.log('Auth状态变更:', event)
+      console.log('🔄 page.tsx: Auth状态变更:', event)
 
       if (event === 'SIGNED_IN' && session?.user) {
+        console.log('🔄 page.tsx: SIGNED_IN 事件，设置 user')
         setUser(session.user)
         // 同样不在这里设 loading false，交给下面的 Effect
       } else if (event === 'SIGNED_OUT') {
+        console.log('🔄 page.tsx: SIGNED_OUT 事件，清除状态')
         setUser(null)
         setUserProfile(null)
         setAppStage('dashboard')
@@ -189,17 +195,24 @@ export default function Home() {
   // ==========================================
   useEffect(() => {
     const fetchProfile = async () => {
+      console.log('📋 fetchProfile 开始执行', { 
+        hasUser: !!user, 
+        hasUserProfile: !!userProfile, 
+        isFetching: isFetchingProfile.current 
+      })
+
       // 各种卫语句：如果没有用户，或者已经有资料，或者正在获取，都直接退出
       if (!user) {
-        // 如果没有用户，确保loading为false（显示登录页）
+        console.log('📋 fetchProfile: 无用户，退出')
         return
       }
       if (userProfile) {
+        console.log('📋 fetchProfile: 已有 userProfile，设置 loading=false 并退出')
         setLoading(false)
         return
       }
       if (isFetchingProfile.current) {
-        // 如果正在获取，保持loading状态
+        console.log('📋 fetchProfile: 正在获取中，退出')
         return
       }
 
@@ -210,8 +223,17 @@ export default function Home() {
         setProfileError(false) // 重置错误状态
         console.log('🚀 开始获取用户资料...')
         
-        // 直接请求，移除所有人为超时限制
-        const { data: profile, error } = await profiles.get(user.id)
+        // 添加超时保护（10秒）
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('获取用户资料超时')), 10000)
+        })
+        
+        // 直接请求，带超时保护
+        const profilePromise = profiles.get(user.id)
+        const result = await Promise.race([profilePromise, timeoutPromise]) as any
+        const { data: profile, error } = result
+
+        console.log('📋 fetchProfile: 获取结果', { hasProfile: !!profile, error })
 
         if (error) {
            console.error('获取资料出错:', error)
@@ -232,6 +254,7 @@ export default function Home() {
             const reportProgress = checkReportProgress(user.id)
             if (reportProgress) {
               // 恢复成绩单状态
+              console.log('📋 恢复成绩单状态')
               setTestResults(reportProgress.testResults)
               setTestWords(reportProgress.testWords.map((w: any) => ({
                 id: w.id || 0,
@@ -279,16 +302,20 @@ export default function Home() {
                   setAppStage('dashboard')
                 }
               } else if (checkTestProgress(user.id)) {
+                console.log('📋 恢复测试进度')
                 setAppStage('challenge')
               } else {
+                console.log('📋 跳转到 dashboard')
                 setAppStage('dashboard')
               }
             }
           }
           // 只有在成功获取profile后才结束loading
+          console.log('📋 设置 loading=false (成功获取 profile)')
           setLoading(false)
         } else if (error && error.code !== 'PGRST116') {
           // 只有在真正的错误时才结束loading并显示错误
+          console.log('📋 设置 profileError=true, loading=false (真正的错误)')
           setProfileError(true)
           setLoading(false)
         } else {
@@ -300,8 +327,10 @@ export default function Home() {
               // 重试一次
               isFetchingProfile.current = true
               try {
+                console.log('🔄 重试获取用户资料...')
                 const { data: retryProfile, error: retryError } = await profiles.get(user.id)
                 if (retryProfile) {
+                  console.log('✅ 重试成功，获取到资料')
                   setUserProfile(retryProfile)
                   setProfileError(false)
                   // 设置默认路由
@@ -311,10 +340,12 @@ export default function Home() {
                   setLoading(false)
                 } else if (retryError && retryError.code !== 'PGRST116') {
                   // 真正的错误
+                  console.log('❌ 重试失败，真正的错误')
                   setProfileError(true)
                   setLoading(false)
                 } else {
                   // 仍然不存在，可能是新用户，显示错误但允许继续
+                  console.log('❌ 重试后仍无资料，显示错误')
                   setProfileError(true)
                   setLoading(false)
                 }
@@ -435,10 +466,12 @@ const handleLogout = async (force: boolean = false) => {
     }
   }, [user])
 
-  const handleAuthSuccess = (authenticatedUser: User) => {
+  // 使用 useCallback 包装，避免每次渲染创建新函数导致 Auth 组件 useEffect 重复执行
+  const handleAuthSuccess = useCallback((authenticatedUser: User) => {
+    console.log('🔑 handleAuthSuccess 被调用，用户ID:', authenticatedUser.id)
     // 这里不需要手动调 fetchUserProfile，因为 setUser 会触发上面的 useEffect
     setUser(authenticatedUser)
-  }
+  }, [])
 
   const handleStartAdventure = () => {
     if (typeof window !== 'undefined' && user) {
@@ -730,6 +763,9 @@ const handleLogout = async (force: boolean = false) => {
     }
   }
 
+  // 添加渲染日志
+  console.log('🎨 page.tsx: 渲染主页面', { appStage, loading, hasUser: !!user, hasUserProfile: !!userProfile })
+
   return (
     <div className="min-h-screen font-quicksand">
       {/* 设置按钮已移除，现在由StudentDashboard组件内的三个图标替代 */}
@@ -768,16 +804,19 @@ const handleLogout = async (force: boolean = false) => {
           </motion.div>
         )}
 
-        {appStage === 'challenge' && (
-          <motion.div key={`challenge-${sessionKey}`} initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }}>
-            <Challenge
-              user={user}
-              testCount={userProfile?.daily_testing_goal || 30}
-              onComplete={handleChallengeComplete}
-              onLogout={() => handleLogout()}
-            />
-          </motion.div>
-        )}
+        {appStage === 'challenge' && (() => {
+          console.log('🎨 page.tsx: 渲染 Challenge 组件')
+          return (
+            <motion.div key={`challenge-${sessionKey}`} initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <Challenge
+                user={user}
+                testCount={userProfile?.daily_testing_goal || 30}
+                onComplete={handleChallengeComplete}
+                onLogout={() => handleLogout()}
+              />
+            </motion.div>
+          )
+        })()}
 
         {appStage === 'report' && testResults && (
           <motion.div key="report" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>

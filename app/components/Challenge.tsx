@@ -67,22 +67,43 @@ type TestPhase = 'translation' | 'spelling' | 'complete'
 export default function Challenge({ user, testCount, onComplete, onLogout }: ChallengeProps) {
   const TEST_PROGRESS_KEY = `test_progress_${user.id}`
   
-  // 从 localStorage 恢复测试进度
+  // ✅ 使用 useRef 缓存 savedProgress，确保只在首次渲染时加载一次
+  const savedProgressRef = useRef<SavedProgress | null | undefined>(undefined)
+  
+  // 从 localStorage 恢复测试进度（惰性加载，只执行一次）
   const loadTestProgress = (): SavedProgress | null => {
-    if (typeof window === 'undefined') return null
+    // 如果已经加载过，直接返回缓存的值
+    if (savedProgressRef.current !== undefined) {
+      return savedProgressRef.current
+    }
+    
+    if (typeof window === 'undefined') {
+      savedProgressRef.current = null
+      return null
+    }
+    
+    console.log('🎯 Challenge: 开始加载测试进度...')
     try {
       const saved = localStorage.getItem(TEST_PROGRESS_KEY)
       if (saved) {
         const parsed = JSON.parse(saved) as SavedProgress
         if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+          console.log('🎯 Challenge: 成功恢复测试进度', { 
+            wordsCount: parsed.testWords?.length,
+            phase: parsed.testPhase,
+            currentIndex: parsed.currentIndex
+          })
+          savedProgressRef.current = parsed
           return parsed
         } else {
+          console.log('🎯 Challenge: 测试进度已过期，清除')
           localStorage.removeItem(TEST_PROGRESS_KEY)
         }
       }
     } catch (error) {
       console.error('加载测试进度失败:', error)
     }
+    savedProgressRef.current = null
     return null
   }
 
@@ -123,37 +144,60 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
       localStorage.removeItem(TEST_PROGRESS_KEY)
       const wordListKey = `word_list_${user.id}`
       localStorage.removeItem(wordListKey)
+      // ✅ 同时清除缓存的 ref
+      savedProgressRef.current = null
+      console.log('🎯 Challenge: 测试进度已清除')
     } catch (error) {
       console.error('清除测试进度失败:', error)
     }
   }
 
-  const savedProgress = loadTestProgress()
-  const [testWords, setTestWords] = useState<Word[]>(savedProgress?.testWords || [])
-  const [currentIndex, setCurrentIndex] = useState(savedProgress?.currentIndex || 0)
-  const [testPhase, setTestPhase] = useState<TestPhase>(savedProgress?.testPhase || 'translation')
+  // ✅ 使用惰性初始化，确保 loadTestProgress 只执行一次
+  const [testWords, setTestWords] = useState<Word[]>(() => {
+    const progress = loadTestProgress()
+    return progress?.testWords || []
+  })
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    const progress = loadTestProgress()
+    return progress?.currentIndex || 0
+  })
+  const [testPhase, setTestPhase] = useState<TestPhase>(() => {
+    const progress = loadTestProgress()
+    return progress?.testPhase || 'translation'
+  })
   const [userInput, setUserInput] = useState('')
   const [showAnswer, setShowAnswer] = useState(false)
   const [isCorrect, setIsCorrect] = useState(false)
-  const [results, setResults] = useState<TestResults>(savedProgress?.results || {
-    translationCorrect: 0,
-    translationTotal: 0,
-    spellingCorrect: 0,
-    spellingTotal: 0,
-    translationErrors: 0,
-    spellingErrors: 0,
+  const [results, setResults] = useState<TestResults>(() => {
+    const progress = loadTestProgress()
+    return progress?.results || {
+      translationCorrect: 0,
+      translationTotal: 0,
+      spellingCorrect: 0,
+      spellingTotal: 0,
+      translationErrors: 0,
+      spellingErrors: 0,
+    }
   })
-  const [wordResults, setWordResults] = useState<Map<number, WordResult>>(
-    savedProgress?.wordResults 
-      ? new Map(savedProgress.wordResults.map((item) => [item.id, { translationError: item.translationError, spellingError: item.spellingError }]))
-      : new Map()
-  )
+  const [wordResults, setWordResults] = useState<Map<number, WordResult>>(() => {
+    const progress = loadTestProgress()
+    if (progress?.wordResults) {
+      return new Map(progress.wordResults.map((item) => [item.id, { translationError: item.translationError, spellingError: item.spellingError }]))
+    }
+    return new Map()
+  })
   const [spellingHint, setSpellingHint] = useState('')
   const [mustTypeCorrect, setMustTypeCorrect] = useState(false)
-  const [hasRestoredProgress, setHasRestoredProgress] = useState(!!savedProgress)
+  const [hasRestoredProgress, setHasRestoredProgress] = useState(() => {
+    const progress = loadTestProgress()
+    return !!progress
+  })
   const [showStartMessage, setShowStartMessage] = useState(true)
   const [selectedOptionIndex, setSelectedOptionIndex] = useState<number>(-1)
   const [loadingOptions, setLoadingOptions] = useState(false)
+  
+  // 添加组件挂载日志
+  console.log('🎯 Challenge: 组件渲染', { hasRestoredProgress, testWordsCount: testWords.length, testPhase })
 
   const inputRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -211,18 +255,78 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
 
   // 初始化单词数据
   useEffect(() => {
+    console.log('🎯 Challenge: 初始化 useEffect 执行', { 
+      hasRestoredProgress, 
+      testWordsLength: testWords.length,
+      currentIndex,
+      testPhase
+    })
+    
     if (hasRestoredProgress && testWords.length > 0) {
-      // 确保 totals 正确
-      setResults(prev => ({
-        ...prev,
-        translationTotal: testWords.length,
-        spellingTotal: testWords.length,
-      }))
-      if (testPhase === 'spelling' && testWords[currentIndex]) {
-        setSpellingHint(generateSpellingHint(testWords[currentIndex].word))
+      console.log('🎯 Challenge: 使用恢复的进度')
+      
+      // ✅ 关键修复：检查是否已经完成了所有测试
+      // 如果是拼写阶段且 currentIndex >= testWords.length，说明测试已完成但未正确处理
+      if (testPhase === 'spelling' && currentIndex >= testWords.length) {
+        console.log('🎯 Challenge: 检测到测试已完成，直接触发完成逻辑', { currentIndex, testWordsLength: testWords.length })
+        
+        // 防止重复调用
+        if (!isCompletedRef.current) {
+          isCompletedRef.current = true
+          clearTestProgress()
+          
+          // 构建完成结果
+          const allTestWords = testWords.map(w => {
+            const wordResult = wordResults.get(w.id) || { translationError: false, spellingError: false }
+            return {
+              id: w.id,
+              word: w.word,
+              translation: w.translation,
+              translationError: wordResult.translationError,
+              spellingError: wordResult.spellingError,
+            }
+          })
+          
+          // 延迟触发完成回调
+          setTimeout(() => {
+            onComplete({
+              ...results,
+              translationTotal: testWords.length,
+              spellingTotal: testWords.length,
+              testWords: allTestWords
+            })
+          }, 100)
+        }
+        return
+      }
+      
+      // ✅ 修复：确保 currentIndex 在有效范围内
+      if (currentIndex >= testWords.length) {
+        console.log('🎯 Challenge: currentIndex 超出范围，重置到最后一个', { currentIndex, testWordsLength: testWords.length })
+        setCurrentIndex(testWords.length - 1)
+      }
+      
+      // 确保 totals 正确（只在 totals 不匹配时更新，避免无限循环）
+      setResults(prev => {
+        if (prev.translationTotal === testWords.length && prev.spellingTotal === testWords.length) {
+          return prev // 如果已经匹配，返回原对象，避免不必要的更新
+        }
+        return {
+          ...prev,
+          translationTotal: testWords.length,
+          spellingTotal: testWords.length,
+        }
+      })
+      
+      // 使用安全的索引
+      const safeIndex = Math.min(currentIndex, testWords.length - 1)
+      if (testPhase === 'spelling' && testWords[safeIndex]) {
+        setSpellingHint(generateSpellingHint(testWords[safeIndex].word))
       }
       return
     }
+    
+    console.log('🎯 Challenge: 开始获取新单词')
 
     const fetchTestWords = async () => {
       const savedListKey = `word_list_${user.id}`
@@ -369,16 +473,29 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
   }, [user.id, hasRestoredProgress, testCount])
 
   // ✅ 核心修复：nextQuestion 接受可选参数，优先使用传入的最新结果
+  // 添加防抖保护，避免重复调用
+  const nextQuestionRef = useRef<number | null>(null)
   const nextQuestion = (
     latestResults?: TestResults, 
     latestWordResults?: Map<number, WordResult>
   ) => {
+    // 防抖：如果上次调用在500ms内，跳过
+    const now = Date.now()
+    if (nextQuestionRef.current && now - nextQuestionRef.current < 500) {
+      console.warn('⚠️ nextQuestion 调用过于频繁，跳过')
+      return
+    }
+    nextQuestionRef.current = now
+
     setSelectedOptionIndex(-1) // 重置选择
     // 优先使用传入的最新数据，否则降级使用 state (处理普通点击翻页的情况)
     const currentResults = latestResults || results
     const currentWordResults = latestWordResults || wordResults
 
-    if (!testWords || testWords.length === 0) return
+    if (!testWords || testWords.length === 0) {
+      console.warn('⚠️ testWords 为空，无法继续')
+      return
+    }
 
     if (currentIndex < testWords.length - 1) {
       setCurrentIndex(prev => prev + 1)
@@ -395,6 +512,10 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
         if (testWords[0]) setSpellingHint(generateSpellingHint(testWords[0].word))
       } else {
         // 完成测试
+        if (isCompletedRef.current) {
+          console.warn('⚠️ 测试已完成，跳过重复调用')
+          return
+        }
         isCompletedRef.current = true
         clearTestProgress()
         
@@ -417,10 +538,13 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
           wordNames: allTestWords.map(w => w.word)
         })
         
-        onComplete({
-          ...currentResults, // ✅ 使用最新的 results
-          testWords: allTestWords
-        })
+        // 使用 setTimeout 确保状态更新完成后再调用 onComplete
+        setTimeout(() => {
+          onComplete({
+            ...currentResults, // ✅ 使用最新的 results
+            testWords: allTestWords
+          })
+        }, 100)
       }
     }
   }
@@ -514,6 +638,7 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
 
     if (correct) {
       setIsCorrect(true)
+      setShowAnswer(true)  // ✅ 修复：显示结果，等待用户点击"下一题"
       // 保持之前的拼写错误记录
       newWordResults.set(wordId, { ...existing, spellingError: existing.spellingError })
       newResults.spellingCorrect += 1
@@ -521,11 +646,7 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
       setWordResults(newWordResults)
       setResults(newResults)
       saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults)
-
-      // ✅ 修复：传递最新的结果给 nextQuestion
-      setTimeout(() => {
-        nextQuestion(newResults, newWordResults)
-      }, 1000)
+      // ✅ 移除自动进入下一题的逻辑，改为和翻译测试一样，需要用户点击"下一题"按钮
 
     } else {
       setIsCorrect(false)
@@ -538,33 +659,54 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
       saveTestProgress(testWords, currentIndex, testPhase, newResults, newWordResults)
       
       playAudio(currentWord.word, 'en')
-      setSelectedOptionIndex(-1)
     }
   }
 
   // 选择题不再需要强制纠错逻辑
 
   useEffect(() => {
-    if (testPhase === 'spelling' && testWords[currentIndex]) {
-      setSpellingHint(generateSpellingHint(testWords[currentIndex].word))
+    if (testPhase === 'spelling' && testWords && testWords.length > 0 && testWords[currentIndex]) {
+      const hint = generateSpellingHint(testWords[currentIndex].word)
+      // 只有当 hint 真的变化时才更新状态
+      setSpellingHint(prev => prev !== hint ? hint : prev)
     }
-  }, [testPhase, currentIndex, testWords])
+  }, [testPhase, currentIndex, testWords.length, testWords[currentIndex]?.word]) // 依赖具体的单词，而不是整个数组
 
-  // 退出保存
+  // 使用 ref 存储最新值，避免 useEffect 依赖对象导致无限循环
+  // 直接在每次渲染时更新 ref，不使用 useEffect（ref 更新不会触发重新渲染）
+  const testWordsRef = useRef(testWords)
+  const currentIndexRef = useRef(currentIndex)
+  const testPhaseRef = useRef(testPhase)
+  const resultsRef = useRef(results)
+  const wordResultsRef = useRef(wordResults)
+
+  // 每次渲染时更新 ref（这是安全的，因为 ref 更新不会触发重新渲染）
+  testWordsRef.current = testWords
+  currentIndexRef.current = currentIndex
+  testPhaseRef.current = testPhase
+  resultsRef.current = results
+  wordResultsRef.current = wordResults
+
+  // 退出保存（使用 ref 避免无限循环）
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (testWords.length > 0 && !isCompletedRef.current) {
-        saveTestProgress(testWords, currentIndex, testPhase, results, wordResults)
+      if (testWordsRef.current.length > 0 && !isCompletedRef.current) {
+        saveTestProgress(
+          testWordsRef.current, 
+          currentIndexRef.current, 
+          testPhaseRef.current, 
+          resultsRef.current, 
+          wordResultsRef.current
+        )
       }
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => {
-      if (testWords.length > 0 && !isCompletedRef.current) {
-        saveTestProgress(testWords, currentIndex, testPhase, results, wordResults)
-      }
       window.removeEventListener('beforeunload', handleBeforeUnload)
+      // 移除清理函数中的保存，避免无限循环
+      // 只在页面卸载时保存（beforeunload 事件）
     }
-  }, [testWords, currentIndex, testPhase, results, wordResults])
+  }, []) // 空依赖数组，只在组件挂载/卸载时运行
 
   const handleLogoutWithSave = async () => {
     if (testWords.length > 0) {
@@ -591,9 +733,35 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
 
   const reviewCount = testWords.filter(w => w.is_review).length
   const newCount = testWords.length - reviewCount
-  const currentWord = testWords[currentIndex]
+  
+  // ✅ 修复：确保 currentIndex 在有效范围内
+  const safeCurrentIndex = Math.min(currentIndex, testWords.length - 1)
+  const currentWord = testWords[safeCurrentIndex]
+  
+  console.log('🎯 Challenge: 渲染检查', { 
+    currentIndex, 
+    safeCurrentIndex,
+    testWordsLength: testWords.length, 
+    hasCurrentWord: !!currentWord,
+    testPhase 
+  })
 
-  if (!currentWord) return null
+  // ✅ 修复：如果 currentIndex 超出范围，重置到 0 并检查是否应该完成
+  if (!currentWord) {
+    console.error('🎯 Challenge: currentWord 为空，currentIndex 可能超出范围', { currentIndex, testWordsLength: testWords.length })
+    // 如果已经完成所有单词，触发完成逻辑
+    if (testPhase === 'spelling' && currentIndex >= testWords.length) {
+      console.log('🎯 Challenge: 检测到测试已完成但未正确处理')
+    }
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20">
+        <div className="text-center">
+          <p className="text-xl text-gray-700 mb-4">加载中...</p>
+          <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-16 h-16 border-4 border-candy-blue border-t-transparent rounded-full mx-auto" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20 p-6 font-quicksand">
@@ -830,7 +998,7 @@ export default function Challenge({ user, testCount, onComplete, onLogout }: Cha
                   提交
                 </motion.button>
               )}
-              {showAnswer && !isCorrect && (
+              {showAnswer && (
                 <motion.button 
                   whileHover={{ scale: 1.05 }} 
                   whileTap={{ scale: 0.95 }} 

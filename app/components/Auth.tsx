@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { auth, profiles, supabase } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
@@ -22,11 +22,17 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
+  // 使用 ref 防止重复调用 onAuthSuccess
+  const hasCalledAuthSuccess = useRef(false)
+
   useEffect(() => {
     // 检查是否已登录
     const checkUser = async () => {
+      if (hasCalledAuthSuccess.current) return
       const { user } = await auth.getCurrentUser()
-      if (user) {
+      if (user && !hasCalledAuthSuccess.current) {
+        hasCalledAuthSuccess.current = true
+        console.log('🔑 Auth: checkUser 检测到已登录用户')
         onAuthSuccess(user)
       }
     }
@@ -34,7 +40,10 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
 
     // 监听认证状态变化
     const { data: { subscription } } = auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
+      console.log('🔑 Auth: onAuthStateChange 事件:', event)
+      if (event === 'SIGNED_IN' && session?.user && !hasCalledAuthSuccess.current) {
+        hasCalledAuthSuccess.current = true
+        console.log('🔑 Auth: SIGNED_IN 事件触发 onAuthSuccess')
         onAuthSuccess(session.user)
       }
     })
@@ -42,7 +51,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
     return () => {
       subscription.unsubscribe()
     }
-  }, [onAuthSuccess])
+  }, []) // 移除 onAuthSuccess 依赖，避免重复执行
 
   // 检查孩子邮箱是否存在
   const checkChildEmail = async (childEmailValue: string) => {
