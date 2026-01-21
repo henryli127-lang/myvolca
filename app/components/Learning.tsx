@@ -56,10 +56,10 @@ export default function Learning({ user, targetCount, onComplete, onLogout }: Le
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const lastPlayedWordRef = useRef<string | null>(null) // 跟踪上次播放的单词，防止重复播放
   // 从 localStorage 恢复学习进度
-// 从 localStorage 恢复学习进度 (修改版：支持恢复完整单词列表)
-const loadProgress = () => {
+  // 从 localStorage 恢复学习进度 (修改版：支持恢复完整单词列表)
+  const loadProgress = () => {
     if (typeof window === 'undefined') return { count: 0, wordIds: [], words: [] }
-    
+
     try {
       const saved = localStorage.getItem(LEARNING_PROGRESS_KEY)
       if (saved) {
@@ -79,7 +79,7 @@ const loadProgress = () => {
   // 保存学习进度到 localStorage (修改版：保存完整单词列表)
   const saveProgress = (count: number, words: Word[]) => {
     if (typeof window === 'undefined') return
-    
+
     try {
       localStorage.setItem(LEARNING_PROGRESS_KEY, JSON.stringify({
         count,
@@ -120,7 +120,7 @@ const loadProgress = () => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       setSpeechSupported(true)
       speechSynthesisRef.current = window.speechSynthesis
-      
+
       const loadVoices = () => {
         if (speechSynthesisRef.current) {
           speechSynthesisRef.current.getVoices()
@@ -143,22 +143,22 @@ const loadProgress = () => {
   const getNextWordFromCache = useCallback(() => {
     const wordListKey = `word_list_${user.id}`
     const saved = localStorage.getItem(wordListKey)
-    
+
     if (!saved) {
       return null
     }
-    
+
     try {
       const parsed = JSON.parse(saved)
       if (!parsed.words || !Array.isArray(parsed.words)) {
         return null
       }
-      
+
       // 找到第一个未学习的单词
-      const unlearnedWord = parsed.words.find((w: Word) => 
+      const unlearnedWord = parsed.words.find((w: Word) =>
         !learnedWordIdsRef.current.has(Number(w.id))
       )
-      
+
       if (unlearnedWord) {
         // ✅ 确保所有字段都被保留，特别是 sentence_en 和 sentence_cn
         const word: Word = {
@@ -174,7 +174,7 @@ const loadProgress = () => {
         }
         return word
       }
-      
+
       return null
     } catch (error) {
       console.error('解析缓存单词列表失败:', error)
@@ -188,7 +188,7 @@ const loadProgress = () => {
       const wordListKey = `word_list_${user.id}`
       const saved = localStorage.getItem(wordListKey)
       let wordsFromCache: Word[] = []
-      
+
       // 检查是否有缓存
       if (saved) {
         try {
@@ -205,12 +205,12 @@ const loadProgress = () => {
               keywords: w.keywords,
               is_review: w.is_review || false
             }))
-            
+
             // 检查是否有未学习的单词
-            const unlearnedWords = wordsFromCache.filter((w: Word) => 
+            const unlearnedWords = wordsFromCache.filter((w: Word) =>
               !learnedWordIdsRef.current.has(Number(w.id))
             )
-            
+
             if (unlearnedWords.length > 0) {
               // 有未完成的单词，使用缓存
               console.log(`从缓存恢复学习，还有 ${unlearnedWords.length} 个单词未学习`)
@@ -227,7 +227,7 @@ const loadProgress = () => {
           wordsFromCache = []
         }
       }
-      
+
       // 计算需要获取的单词数量
       const remainingCount = TARGET_WORDS - learnedCount
       if (remainingCount <= 0) {
@@ -235,20 +235,20 @@ const loadProgress = () => {
         setLoading(false)
         return
       }
-      
+
       // 如果缓存中没有未学习的单词，需要获取新单词
       if (wordsFromCache.filter((w: Word) => !learnedWordIdsRef.current.has(Number(w.id))).length === 0) {
         console.log(`开始新的学习会话，获取 ${remainingCount} 个新单词`)
         setLoading(true)
-        
+
         const { data, error } = await words.getNewWordsBatch(user.id, remainingCount)
-        
+
         if (error || !data || data.length === 0) {
           console.error('获取学习单词失败:', error)
           setLoading(false)
           return
         }
-        
+
         // 保存到缓存（确保所有字段都被保留）
         const wordsToCache = data.map((w: any) => {
           const word: Word = {
@@ -264,24 +264,24 @@ const loadProgress = () => {
           }
           return word
         })
-        
+
         // 合并缓存和新单词（如果有缓存）
         const allWords = [...wordsFromCache, ...wordsToCache]
         localStorage.setItem(wordListKey, JSON.stringify({
           words: allWords,
           timestamp: Date.now()
         }))
-        
+
         // 显示第一个未学习的单词
         const firstUnlearned = allWords.find((w: Word) => !learnedWordIdsRef.current.has(Number(w.id)))
         if (firstUnlearned) {
           setWord(firstUnlearned)
         }
       }
-      
+
       setLoading(false)
     }
-    
+
     initializeWords()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -314,14 +314,14 @@ const loadProgress = () => {
     // 从已学习列表中移除
     learnedWordIdsRef.current.delete(lastWord.id)
     learnedWordsRef.current = learnedWordsRef.current.filter(w => w.id !== lastWord.id)
-    
+
     // 减少计数
     const newCount = Math.max(0, learnedCount - 1)
     setLearnedCount(newCount)
-    
+
     // 保存进度
     saveProgress(newCount, learnedWordsRef.current)
-    
+
     // 将单词重新添加到 word_list 的开头
     const wordListKey = `word_list_${user.id}`
     const saved = localStorage.getItem(wordListKey)
@@ -342,7 +342,7 @@ const loadProgress = () => {
         console.error('更新 word_list 失败:', error)
       }
     }
-    
+
     // 显示上一个单词
     setWord(lastWord)
     setIsFlipped(false)
@@ -391,17 +391,17 @@ const loadProgress = () => {
 
   // 自动播放
   //useEffect(() => {
-    //if (word && !isFlipped && speechSupported) {
-      //const timer = setTimeout(() => {
-        //playAudio(word.word)
-      //}, 500)
-      //return () => {
-        //clearTimeout(timer)
-        //if (speechSynthesisRef.current) {
-          //speechSynthesisRef.current.cancel()
-        //}
-      //}
-    //}
+  //if (word && !isFlipped && speechSupported) {
+  //const timer = setTimeout(() => {
+  //playAudio(word.word)
+  //}, 500)
+  //return () => {
+  //clearTimeout(timer)
+  //if (speechSynthesisRef.current) {
+  //speechSynthesisRef.current.cancel()
+  //}
+  //}
+  //}
   //}, [word, isFlipped, speechSupported, playAudio])
 
 
@@ -410,20 +410,20 @@ const loadProgress = () => {
       console.warn('playAudio: 文本为空，无法播放')
       return
     }
-    
+
     console.log('playAudio 被调用:', { text: text.substring(0, 50), lang })
-    
+
     // ✅ 如果正在播放，直接返回，防止重复播放
     // 检查 audioRef.current 是否存在且正在播放（更可靠）
     if (audioRef.current && !audioRef.current.paused && audioRef.current.currentTime > 0) {
       console.log('音频正在播放，忽略重复调用')
       return
     }
-    
+
     // 使用 ref 检查 isSpeaking，避免依赖状态
     // 注意：这里不检查 isSpeaking 状态，因为状态更新是异步的，可能导致竞态条件
     // 只检查 audioRef.current 的播放状态
-    
+
     setIsSpeaking(true)
 
     try {
@@ -436,12 +436,12 @@ const loadProgress = () => {
 
       console.log('正在请求 TTS:', { text: text.substring(0, 50), lang })
       //const response = await fetch('/api/tts', {
-        //method: 'POST',
-        //headers: { 'Content-Type': 'application/json' },
-        //body: JSON.stringify({ text, lang }),
-        const response = await fetch(`/api/tts?text=${encodeURIComponent(text)}&lang=${lang}`, {
-            method: 'GET',
-            // GET 请求不需要 body 和 Content-Type
+      //method: 'POST',
+      //headers: { 'Content-Type': 'application/json' },
+      //body: JSON.stringify({ text, lang }),
+      const response = await fetch(`/api/tts?text=${encodeURIComponent(text)}&lang=${lang}`, {
+        method: 'GET',
+        // GET 请求不需要 body 和 Content-Type
       })
 
       if (!response.ok) {
@@ -458,17 +458,17 @@ const loadProgress = () => {
 
       // 验证 blob 类型
       console.log('Received audio blob:', { size: blob.size, type: blob.type })
-      
+
       // 读取 blob 的前几个字节，验证是否是有效的音频格式
       const arrayBuffer = await blob.arrayBuffer()
       const uint8Array = new Uint8Array(arrayBuffer)
       const firstBytes = Array.from(uint8Array.slice(0, 10)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')
       console.log('Audio data first bytes:', firstBytes)
-      
+
       // 检查是否是有效的 MP3 格式（MP3 通常以 0xFF 0xFB 或 ID3 标签开头）
       const isValidMP3 = uint8Array[0] === 0xFF && (uint8Array[1] & 0xE0) === 0xE0 || // MP3 frame sync
-                         (uint8Array[0] === 0x49 && uint8Array[1] === 0x44 && uint8Array[2] === 0x33) // ID3 tag
-      
+        (uint8Array[0] === 0x49 && uint8Array[1] === 0x44 && uint8Array[2] === 0x33) // ID3 tag
+
       if (!isValidMP3) {
         console.warn('Audio data may not be valid MP3, first bytes:', firstBytes)
         // 尝试查找 MP3 帧头
@@ -485,7 +485,7 @@ const loadProgress = () => {
           blob = new Blob([trimmedBuffer], { type: 'audio/mpeg' })
         }
       }
-      
+
       // 如果 Content-Type 不正确，尝试修复
       let audioBlob = blob
       if (!blob.type || !blob.type.startsWith('audio/')) {
@@ -495,10 +495,10 @@ const loadProgress = () => {
 
       const url = URL.createObjectURL(audioBlob)
       const audio = new Audio(url)
-      
+
       // 设置播放速度
       audio.playbackRate = playbackRate
-      
+
       // ✅ 赋值给 Ref 
       audioRef.current = audio
 
@@ -528,7 +528,7 @@ const loadProgress = () => {
           lastPlayedWordRef.current = null
         }
       }
-      
+
       // 等待音频加载
       await new Promise((resolve, reject) => {
         audio.oncanplaythrough = () => {
@@ -548,7 +548,7 @@ const loadProgress = () => {
           }
         }, 5000)
       })
-      
+
       await audio.play()
       console.log('音频播放开始')
     } catch (error) {
@@ -563,7 +563,7 @@ const loadProgress = () => {
       }
     }
   }, [playbackRate]) // 包含 playbackRate 依赖，确保速度设置生效
-  
+
   // 自动播放：只在单词变化且卡片未翻转时播放
   useEffect(() => {
     // 只在有单词、卡片未翻转、且单词字符串存在时执行
@@ -572,27 +572,27 @@ const loadProgress = () => {
       lastPlayedWordRef.current = null
       return
     }
-    
+
     const currentWordText = word.word // 保存当前单词文本
-    
+
     // ✅ 如果这个单词已经播放过，不再重复播放
     if (lastPlayedWordRef.current === currentWordText) {
       return
     }
-    
+
     // ✅ 如果正在播放其他音频，不自动播放（使用 ref 检查，避免依赖状态）
     if (audioRef.current && !audioRef.current.paused && audioRef.current.currentTime > 0) {
       return
     }
-    
+
     // 标记为已播放，防止重复触发（在设置定时器之前就标记）
     lastPlayedWordRef.current = currentWordText
-    
+
     const timer = setTimeout(() => {
       // 再次检查，确保在延迟期间没有开始播放其他音频，且单词没有变化
-      if ((!audioRef.current || audioRef.current.paused) && 
-          lastPlayedWordRef.current === currentWordText &&
-          word && word.word === currentWordText) {
+      if ((!audioRef.current || audioRef.current.paused) &&
+        lastPlayedWordRef.current === currentWordText &&
+        word && word.word === currentWordText) {
         console.log('自动播放单词:', currentWordText)
         playAudio(currentWordText, 'en')
       } else {
@@ -602,7 +602,7 @@ const loadProgress = () => {
         }
       }
     }, 500)
-    
+
     return () => {
       clearTimeout(timer)
       // 如果组件卸载或单词变化，且定时器还没执行，重置标记
@@ -641,7 +641,7 @@ const loadProgress = () => {
       learnedWordIdsRef.current.add(word.id)
       // ✅ 新增：把当前学完的这个单词加入列表
       learnedWordsRef.current = [...learnedWordsRef.current, word]
-      
+
       const newCount = learnedCount + 1
       setLearnedCount(newCount)
 
@@ -659,7 +659,7 @@ const loadProgress = () => {
 
         // 清除学习进度（learning_progress 可以清了，但 word_list 留给测试用）
         clearProgress()
-        
+
         setShowTransition(true)
         setTimeout(() => {
           onComplete()
@@ -684,7 +684,7 @@ const loadProgress = () => {
       const currentWords = learnedWordsRef.current
       const currentWordIds = learnedWordIdsRef.current
       const currentCount = learnedWordsRef.current.length
-      
+
       if (currentCount > 0 && currentWordIds.size > 0) {
         saveProgress(currentCount, currentWords)
         // 同时更新 word_list
@@ -694,7 +694,7 @@ const loadProgress = () => {
           try {
             const parsed = JSON.parse(saved)
             if (parsed.words && Array.isArray(parsed.words)) {
-              const unlearnedWords = parsed.words.filter((w: Word) => 
+              const unlearnedWords = parsed.words.filter((w: Word) =>
                 !currentWordIds.has(Number(w.id))
               )
               if (unlearnedWords.length > 0) {
@@ -710,18 +710,18 @@ const loadProgress = () => {
         }
       }
     }
-    
+
     // 监听页面关闭事件
     if (typeof window !== 'undefined') {
       window.addEventListener('beforeunload', handleBeforeUnload)
     }
-    
+
     return () => {
       // 组件卸载时也保存进度
       const currentWords = learnedWordsRef.current
       const currentWordIds = learnedWordIdsRef.current
       const currentCount = learnedWordsRef.current.length
-      
+
       if (currentCount > 0 && currentWordIds.size > 0) {
         saveProgress(currentCount, currentWords)
       }
@@ -736,141 +736,217 @@ const loadProgress = () => {
   const handleLogoutWithSave = () => {
     // 确保当前进度已保存（如果用户在学习过程中退出）
     if (learnedCount > 0 && learnedWordIdsRef.current.size > 0) {
-        saveProgress(learnedCount, learnedWordsRef.current)
-        // 同时保存 word_list，以便测试时使用
-        const wordListKey = `word_list_${user.id}`
-        const saved = localStorage.getItem(wordListKey)
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved)
-            if (parsed.words && Array.isArray(parsed.words)) {
-              // 更新 word_list，保留未学习的单词
-              const unlearnedWords = parsed.words.filter((w: Word) => 
-                !learnedWordIdsRef.current.has(Number(w.id))
-              )
-              if (unlearnedWords.length > 0) {
-                localStorage.setItem(wordListKey, JSON.stringify({
-                  words: unlearnedWords,
-                  timestamp: Date.now()
-                }))
-              }
+      saveProgress(learnedCount, learnedWordsRef.current)
+      // 同时保存 word_list，以便测试时使用
+      const wordListKey = `word_list_${user.id}`
+      const saved = localStorage.getItem(wordListKey)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          if (parsed.words && Array.isArray(parsed.words)) {
+            // 更新 word_list，保留未学习的单词
+            const unlearnedWords = parsed.words.filter((w: Word) =>
+              !learnedWordIdsRef.current.has(Number(w.id))
+            )
+            if (unlearnedWords.length > 0) {
+              localStorage.setItem(wordListKey, JSON.stringify({
+                words: unlearnedWords,
+                timestamp: Date.now()
+              }))
             }
-          } catch (error) {
-            console.error('更新 word_list 失败:', error)
           }
+        } catch (error) {
+          console.error('更新 word_list 失败:', error)
         }
+      }
     }
     onLogout()
   }
 
   if (loading || !word) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-kawaii-pink/30 via-kawaii-lavender/40 to-kawaii-sky/30">
+        {/* 背景装饰 Blobs */}
+        <div className="absolute top-0 left-0 w-96 h-96 blob-pink rounded-full blur-3xl -translate-x-1/3 -translate-y-1/3 animate-blob" />
+        <div className="absolute bottom-0 right-0 w-80 h-80 blob-purple rounded-full blur-3xl translate-x-1/4 translate-y-1/4 animate-blob" style={{ animationDelay: '2s' }} />
+
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          className="w-16 h-16 border-4 border-candy-blue border-t-transparent rounded-full"
+          className="w-16 h-16 border-4 border-gradient-cyan border-t-transparent rounded-full"
         />
       </div>
     )
   }
 
-
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20 p-6 font-quicksand">
-      {/* 退出按钮 */}
-      <div className="absolute top-4 right-4 z-10">
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={handleLogoutWithSave}
-          className="bg-white/80 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
-        >
-          <span>🚪</span>
-          <span className="font-semibold">退出</span>
-        </motion.button>
-      </div>
-      <div className="max-w-4xl mx-auto">
-        {/* 进度条和播放速度控制 */}
-        <div className="mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-lg font-semibold text-gray-700">
+    <div className="min-h-screen bg-gradient-to-br from-kawaii-pink/30 via-kawaii-lavender/40 to-kawaii-sky/30 p-4 md:p-6 font-quicksand relative overflow-hidden">
+      {/* ===== 背景装饰层 ===== */}
+      {/* 彩色 Blob 装饰 */}
+      <div className="absolute top-0 left-0 w-80 h-80 blob-pink rounded-full blur-3xl -translate-x-1/3 -translate-y-1/4 animate-blob" />
+      <div className="absolute top-1/4 right-0 w-96 h-96 blob-purple rounded-full blur-3xl translate-x-1/3 animate-blob" style={{ animationDelay: '2s' }} />
+      <div className="absolute bottom-0 left-1/4 w-72 h-72 blob-blue rounded-full blur-3xl translate-y-1/3 animate-blob" style={{ animationDelay: '4s' }} />
+      <div className="absolute bottom-1/4 right-1/4 w-64 h-64 blob-orange rounded-full blur-3xl animate-blob" style={{ animationDelay: '6s' }} />
+      <div className="absolute top-1/2 left-0 w-48 h-48 blob-purple rounded-full blur-2xl -translate-x-1/2 animate-blob" style={{ animationDelay: '3s' }} />
+
+      {/* ===== 顶部导航栏 ===== */}
+      <div className="relative z-20 max-w-5xl mx-auto mb-4">
+        <div className="flex justify-between items-center">
+          {/* 左侧：学习进度 */}
+          <div className="flex flex-col">
+            <span className="text-base md:text-lg font-bold text-gray-700">
               学习进度: {learnedCount} / {TARGET_WORDS}
             </span>
-            <div className="flex items-center gap-4">
-              {/* 播放速度选择 */}
-              <div className="flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-md">
-                <span className="text-xs text-gray-600 font-semibold">播放速度:</span>
-                <select
-                  value={playbackRate.toString()}
-                  onChange={(e) => {
-                    const newRate = parseFloat(e.target.value)
-                    if (!isNaN(newRate) && newRate > 0) {
-                      setPlaybackRate(newRate)
-                      // 如果正在播放，立即应用新的播放速度
-                      if (audioRef.current) {
-                        audioRef.current.playbackRate = newRate
-                      }
-                    }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-xs font-semibold text-candy-blue bg-transparent border-none outline-none cursor-pointer"
-                >
-                  <option value="0.5">0.5x</option>
-                  <option value="0.75">0.75x</option>
-                  <option value="1">1.0x</option>
-                  <option value="1.25">1.25x</option>
-                  <option value="1.5">1.5x</option>
-                </select>
-              </div>
-              <span className="text-sm text-gray-600">
-                {Math.round((learnedCount / TARGET_WORDS) * 100)}%
-              </span>
+            {/* 进度条 */}
+            <div className="w-48 md:w-64 bg-white/50 rounded-full h-3 mt-2 overflow-hidden shadow-inner">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${(learnedCount / TARGET_WORDS) * 100}%` }}
+                transition={{ duration: 0.3 }}
+                className="progress-gradient h-3 rounded-full"
+              />
             </div>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${(learnedCount / TARGET_WORDS) * 100}%` }}
-              transition={{ duration: 0.3 }}
-              className="bg-gradient-to-r from-candy-blue via-candy-green to-candy-orange h-4 rounded-full"
-            />
+
+          {/* 右侧：播放速度和退出按钮 */}
+          <div className="flex items-center gap-3">
+            {/* 播放速度选择器 */}
+            <div className="speed-selector flex items-center gap-2">
+              <span className="text-xs text-gray-600 font-semibold whitespace-nowrap">播放速度:</span>
+              <select
+                value={playbackRate.toString()}
+                onChange={(e) => {
+                  const newRate = parseFloat(e.target.value)
+                  if (!isNaN(newRate) && newRate > 0) {
+                    setPlaybackRate(newRate)
+                    if (audioRef.current) {
+                      audioRef.current.playbackRate = newRate
+                    }
+                  }
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="text-xs font-semibold text-candy-blue bg-transparent border-none outline-none cursor-pointer"
+              >
+                <option value="0.5">0.5x</option>
+                <option value="0.75">0.75x</option>
+                <option value="1">1.0x</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+              </select>
+            </div>
+
+            {/* 完成百分比 */}
+            <span className="text-sm text-gray-600 font-semibold">
+              {Math.round((learnedCount / TARGET_WORDS) * 100)}%
+            </span>
+
+            {/* 退出按钮 */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleLogoutWithSave}
+              className="exit-btn text-red-500 px-4 py-2 rounded-xl flex items-center gap-2 font-semibold"
+            >
+              <span>🚪</span>
+              <span>退出</span>
+            </motion.button>
           </div>
         </div>
+      </div>
 
-        {/* 单词卡片 */}
-        <div className="flex-1 flex items-center justify-center mb-8">
-          <div className="w-full max-w-2xl">
+      {/* ===== 主内容区域 ===== */}
+      <div className="max-w-4xl mx-auto relative z-10">
+        {/* 单词卡片容器 */}
+        <div className="flex items-center justify-center mb-8">
+          <div className="w-full max-w-2xl relative">
+
+            {/* 可爱装饰元素 */}
+            {/* 小火箭 */}
+            <motion.div
+              className="absolute -left-8 md:-left-16 bottom-1/4 text-4xl md:text-5xl z-0"
+              animate={{ y: [0, -15, 0], rotate: [0, 5, 0] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              🚀
+            </motion.div>
+
+            {/* 可爱云朵 (右上角) */}
+            <motion.div
+              className="absolute -right-4 md:-right-12 -top-4 md:-top-8 z-20"
+              animate={{ y: [0, -8, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <div className="relative kawaii-cloud">
+                <span className="text-5xl md:text-6xl">☁️</span>
+                {/* 云朵表情 */}
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/3 text-xs">
+                  <span className="text-pink-400">◕‿◕</span>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* 星星装饰 */}
+            <motion.div
+              className="absolute -right-2 top-4 text-yellow-400 text-lg animate-sparkle"
+            >
+              ⭐
+            </motion.div>
+            <motion.div
+              className="absolute right-8 -top-2 text-yellow-300 text-sm animate-sparkle"
+              style={{ animationDelay: '0.3s' }}
+            >
+              ✦
+            </motion.div>
+            <motion.div
+              className="absolute right-16 top-2 text-orange-300 text-xs animate-sparkle"
+              style={{ animationDelay: '0.6s' }}
+            >
+              ✦
+            </motion.div>
+            <motion.div
+              className="absolute -right-6 top-16 text-yellow-200 text-base animate-sparkle"
+              style={{ animationDelay: '0.9s' }}
+            >
+              ☆
+            </motion.div>
+
+            {/* ===== 卡片主体 ===== */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               className="relative perspective-1000"
             >
+              {/* 阴影层/装饰层 */}
+              <div className="absolute -bottom-3 -right-3 w-full h-full rainbow-card-shadow rounded-3xl transform rotate-2" />
+              <div className="absolute -bottom-1 -right-1 w-full h-full rainbow-card-shadow rounded-3xl opacity-70" />
+
               <motion.div
-                className="relative w-full h-96 transform-style-preserve-3d cursor-pointer"
+                className="relative w-full min-h-[380px] md:min-h-[420px] transform-style-preserve-3d cursor-pointer"
                 animate={{ rotateY: isFlipped ? 180 : 0 }}
                 transition={{ duration: 0.7, ease: 'easeInOut' }}
                 onClick={handleCardClick}
               >
-                {/* 正面 - 英文单词 */}
-                <div className="absolute inset-0 backface-hidden rounded-3xl bg-gradient-to-br from-candy-blue via-candy-green to-candy-orange shadow-2xl flex flex-col items-center justify-center p-8 border-4 border-white">
+                {/* ===== 正面 - 英文单词 ===== */}
+                <div className="absolute inset-0 backface-hidden rainbow-card rounded-3xl flex flex-col items-center justify-center p-6 md:p-8 border-2 border-white/40">
+
                   {/* Review 标签 */}
                   {word.is_review && (
                     <motion.div
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className="absolute top-4 right-4 bg-yellow-400 text-yellow-900 px-4 py-2 rounded-full font-bold text-sm shadow-lg"
+                      className="absolute top-4 left-4 bg-yellow-400 text-yellow-900 px-4 py-2 rounded-full font-bold text-sm shadow-lg"
                     >
                       🔄 Review
                     </motion.div>
                   )}
+
+                  {/* 单词显示区域 */}
                   <div className="flex items-center justify-center gap-4 mb-6">
                     <motion.h2
                       initial={{ scale: 0.8, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                       transition={{ delay: 0.2 }}
-                      className="text-7xl font-bold text-white drop-shadow-lg text-center"
+                      className="bubble-text text-6xl md:text-8xl font-extrabold text-center"
                     >
                       {word.word}
                     </motion.h2>
@@ -881,26 +957,26 @@ const loadProgress = () => {
                         e.stopPropagation()
                         playAudio(word.word, 'en')
                       }}
-                      className={`p-3 rounded-full transition-all ${
-                        isSpeaking
-                          ? 'bg-white/30 text-white animate-pulse'
-                          : 'bg-white/20 hover:bg-white/30 text-white'
-                      }`}
+                      className={`p-3 rounded-full transition-all ${isSpeaking
+                          ? 'bg-white/40 text-white animate-pulse'
+                          : 'bg-white/25 hover:bg-white/40 text-white'
+                        }`}
                       aria-label="朗读单词"
                     >
-                      <VolumeIcon size={32} className={isSpeaking ? 'animate-pulse' : ''} />
+                      <VolumeIcon size={28} className={isSpeaking ? 'animate-pulse' : ''} />
                     </motion.button>
                   </div>
-                  {/* 新词显示完整例句，复习词不显示 */}
+
+                  {/* 例句卡片 (仅新词显示) */}
                   {word.sentence_en && !word.is_review && (
                     <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.3 }}
-                      className="bg-white/30 backdrop-blur-sm rounded-2xl p-5 border-2 border-white/50 max-w-2xl"
+                      className="glass-card rounded-2xl p-4 md:p-5 max-w-xl w-full"
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <p className="text-white font-semibold text-sm">📝 例句</p>
+                        <p className="text-gray-700 font-semibold text-sm">📝 例句</p>
                         <motion.button
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.9 }}
@@ -911,36 +987,38 @@ const loadProgress = () => {
                               playAudio(word.sentence_en, 'en')
                             }
                           }}
-                          className={`p-2 rounded-full transition-all ${
-                            isSpeaking
-                              ? 'bg-white/30 text-white animate-pulse'
-                              : 'bg-white/20 hover:bg-white/30 text-white'
-                          }`}
+                          className={`p-2 rounded-full transition-all ${isSpeaking
+                              ? 'bg-gray-200 text-gray-600 animate-pulse'
+                              : 'bg-gray-100 hover:bg-gray-200 text-gray-500'
+                            }`}
                           aria-label="朗读例句"
                         >
-                          <VolumeIcon size={20} className={isSpeaking ? 'animate-pulse' : ''} />
+                          <VolumeIcon size={18} className={isSpeaking ? 'animate-pulse' : ''} />
                         </motion.button>
                       </div>
-                      <p className="text-white text-base leading-relaxed italic">
+                      <p className="text-gray-700 text-sm md:text-base leading-relaxed italic">
                         {word.sentence_en}
                       </p>
                     </motion.div>
                   )}
+
+                  {/* 提示文字 */}
                   <motion.p
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.5 }}
-                    className="text-white/90 text-lg mt-6"
+                    className="text-white/90 text-base mt-6 drop-shadow"
                   >
                     👆 点击卡片查看详情
                   </motion.p>
                 </div>
 
-                {/* 背面 - 翻译、词性、记忆技巧和例句 */}
-                <div className="absolute inset-0 backface-hidden rounded-3xl bg-gradient-to-br from-candy-orange via-candy-green to-candy-blue shadow-2xl flex flex-col p-8 border-4 border-white overflow-y-auto" style={{ transform: 'rotateY(180deg)' }}>
+                {/* ===== 背面 - 翻译和详情 ===== */}
+                <div className="absolute inset-0 backface-hidden rainbow-card rounded-3xl flex flex-col p-6 md:p-8 border-2 border-white/40 overflow-y-auto" style={{ transform: 'rotateY(180deg)' }}>
                   <div className="flex-1">
+                    {/* 翻译 */}
                     <div className="text-center mb-6">
-                      <h3 className="text-5xl font-bold text-white drop-shadow-lg mb-3">
+                      <h3 className="text-4xl md:text-5xl font-bold text-white drop-shadow-lg mb-3">
                         {word.translation}
                       </h3>
                       {word.pos && (
@@ -950,29 +1028,31 @@ const loadProgress = () => {
                       )}
                     </div>
 
+                    {/* 记忆技巧 */}
                     {word.mnemonic && (
                       <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 }}
-                        className="mb-6 bg-white/30 backdrop-blur-sm rounded-2xl p-5 border-2 border-white/50"
+                        className="mb-5 glass-card rounded-2xl p-4 md:p-5"
                       >
-                        <p className="text-white font-semibold text-sm mb-2">💡 记忆技巧</p>
-                        <p className="text-white text-base leading-relaxed">
+                        <p className="text-gray-700 font-semibold text-sm mb-2">💡 记忆技巧</p>
+                        <p className="text-gray-700 text-sm md:text-base leading-relaxed">
                           {word.mnemonic}
                         </p>
                       </motion.div>
                     )}
 
+                    {/* 中文例句 */}
                     {word.sentence_cn && (
                       <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.4 }}
-                        className="bg-white/30 backdrop-blur-sm rounded-2xl p-5 border-2 border-white/50"
+                        className="glass-card rounded-2xl p-4 md:p-5"
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <p className="text-white font-semibold text-sm">📝 中文例句</p>
+                          <p className="text-gray-700 font-semibold text-sm">📝 中文例句</p>
                           <motion.button
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
@@ -983,17 +1063,16 @@ const loadProgress = () => {
                                 playAudio(word.sentence_cn, 'zh')
                               }
                             }}
-                            className={`p-2 rounded-full transition-all ${
-                              isSpeaking
-                                ? 'bg-white/30 text-white animate-pulse'
-                                : 'bg-white/20 hover:bg-white/30 text-white'
-                            }`}
+                            className={`p-2 rounded-full transition-all ${isSpeaking
+                                ? 'bg-gray-200 text-gray-600 animate-pulse'
+                                : 'bg-gray-100 hover:bg-gray-200 text-gray-500'
+                              }`}
                             aria-label="朗读中文例句"
                           >
-                            <VolumeIcon size={20} className={isSpeaking ? 'animate-pulse' : ''} />
+                            <VolumeIcon size={18} className={isSpeaking ? 'animate-pulse' : ''} />
                           </motion.button>
                         </div>
-                        <p className="text-white text-base leading-relaxed">
+                        <p className="text-gray-700 text-sm md:text-base leading-relaxed">
                           {word.sentence_cn}
                         </p>
                       </motion.div>
@@ -1005,40 +1084,44 @@ const loadProgress = () => {
           </div>
         </div>
 
-        {/* 操作按钮 */}
-        <div className="flex gap-4 justify-center items-center">
-          {/* 回退按钮 - 只在有历史记录时显示 */}
+        {/* ===== 操作按钮 ===== */}
+        <div className="flex gap-4 justify-center items-center flex-wrap">
+          {/* 回退按钮 */}
           {canGoBack && (
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleGoBack}
-              className="bg-gray-500 text-white font-bold py-4 px-6 rounded-2xl shadow-xl hover:shadow-2xl transform transition-all text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="kawaii-btn kawaii-btn-gray"
               title="回退到上一个单词"
             >
               ⬅️ 回退
             </motion.button>
           )}
+
+          {/* Got it 按钮 */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleGotIt}
-            className="bg-candy-green text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transform transition-all text-lg"
+            className="kawaii-btn kawaii-btn-green"
           >
             ✅ Got it
           </motion.button>
+
+          {/* Not sure 按钮 */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleNotSure}
-            className="bg-candy-orange text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transform transition-all text-lg"
+            className="kawaii-btn kawaii-btn-orange"
           >
             ❓ Not sure
           </motion.button>
         </div>
       </div>
 
-      {/* 完成过渡动画 */}
+      {/* ===== 完成过渡动画 ===== */}
       <AnimatePresence>
         {showTransition && (
           <motion.div
@@ -1052,9 +1135,9 @@ const loadProgress = () => {
               animate={{ scale: 1, rotate: 0 }}
               exit={{ scale: 0.5, rotate: 180 }}
               transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-              className="text-6xl font-bold text-white text-center"
+              className="text-5xl md:text-6xl font-bold text-white text-center"
             >
-              Challenge Unlocked! ⚔️
+              🎉 Challenge Unlocked! ⚔️
             </motion.div>
           </motion.div>
         )}
@@ -1062,4 +1145,5 @@ const loadProgress = () => {
     </div>
   )
 }
+
 

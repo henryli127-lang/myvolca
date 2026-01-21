@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { reports } from '@/lib/supabase'
 import { Printer } from 'lucide-react' // ✅ 引入图标
@@ -20,6 +21,12 @@ export default function WordHistoryModal({ isOpen, onClose, userId, title = "已
   const [loading, setLoading] = useState(false)
   const [historyData, setHistoryData] = useState<any[]>([])
   const [hasSearched, setHasSearched] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
 
   const handleSearch = async () => {
     if (!userId) return
@@ -67,7 +74,7 @@ export default function WordHistoryModal({ isOpen, onClose, userId, title = "已
     const rows = historyData.map(item => {
       let statusHtml = ''
       const { translation_errors: tErr, spelling_errors: sErr } = item
-      
+
       if (tErr === 0 && sErr === 0) statusHtml = '<span class="tag tag-green">💯 全对</span>'
       else if (tErr > 0 && sErr > 0) statusHtml = '<span class="tag tag-red">❌ 双错</span>'
       else if (tErr > 0) statusHtml = '<span class="tag tag-orange">🔤 翻译错</span>'
@@ -141,10 +148,12 @@ export default function WordHistoryModal({ isOpen, onClose, userId, title = "已
     return <span className="px-2 py-1 bg-gray-100 text-gray-500 rounded-full text-xs">未知</span>
   }
 
-  return (
+  if (!mounted) return null
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -154,7 +163,7 @@ export default function WordHistoryModal({ isOpen, onClose, userId, title = "已
             {/* 头部 */}
             <div className="p-6 bg-candy-blue flex justify-between items-center text-white">
               <h2 className="text-2xl font-bold">{title}</h2>
-              <button 
+              <button
                 onClick={onClose}
                 className="p-2 hover:bg-white/20 rounded-full transition-colors"
               >
@@ -189,7 +198,7 @@ export default function WordHistoryModal({ isOpen, onClose, userId, title = "已
               >
                 {loading ? '查询中...' : '🔍 查询'}
               </button>
-              
+
               {/* ✅ 新增：打印/导出按钮 */}
               {hasSearched && historyData.length > 0 && (
                 <button
@@ -229,7 +238,7 @@ export default function WordHistoryModal({ isOpen, onClose, userId, title = "已
                         <td className="p-3 text-gray-400 text-sm text-right">
                           {item.last_reviewed_at ? (
                             <>
-                              {new Date(item.last_reviewed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} <br/>
+                              {new Date(item.last_reviewed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} <br />
                               {new Date(item.last_reviewed_at).toLocaleDateString()}
                             </>
                           ) : (
@@ -242,7 +251,7 @@ export default function WordHistoryModal({ isOpen, onClose, userId, title = "已
                 </table>
               )}
             </div>
-            
+
             {/* 底部统计 */}
             {hasSearched && historyData.length > 0 && (
               <div className="p-4 bg-gray-50 text-right text-gray-500 text-sm border-t">
@@ -252,6 +261,7 @@ export default function WordHistoryModal({ isOpen, onClose, userId, title = "已
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   )
 }

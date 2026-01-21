@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&family=Bubblegum+Sans&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -13,6 +13,7 @@ body {
   font-family: 'Quicksand', sans-serif;
 }
 
+/* 3D Transform styles */
 .perspective-1000 {
   perspective: 1000px;
 }
@@ -34,3 +35,158 @@ body {
   transform-style: preserve-3d;
 }
 
+/* ===== High-Playful 超萌风格 ===== */
+
+/* 气泡文字效果 - 3D高对比度风格 */
+.bubble-text {
+  font-family: 'Bubblegum Sans', 'Comic Sans MS', cursive;
+  color: #38bdf8;
+  text-shadow:
+    /* 白色描边效果 */
+    -3px -3px 0 #fff,
+    3px -3px 0 #fff,
+    -3px 3px 0 #fff,
+    3px 3px 0 #fff,
+    -3px 0 0 #fff,
+    3px 0 0 #fff,
+    0 -3px 0 #fff,
+    0 3px 0 #fff,
+    /* 3D 阴影效果 */
+    4px 4px 0 rgba(56, 189, 248, 0.3),
+    6px 6px 8px rgba(0, 0, 0, 0.15);
+  letter-spacing: 2px;
+}
+
+/* 气泡文字描边效果 - 使用伪元素 */
+.bubble-text-stroke {
+  position: relative;
+  font-family: 'Bubblegum Sans', 'Comic Sans MS', cursive;
+}
+
+.bubble-text-stroke::before {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  -webkit-text-stroke: 6px white;
+  z-index: -1;
+}
+
+/* 玻璃态卡片效果 */
+.glass-card {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
+/* 彩虹渐变卡片 */
+.rainbow-card {
+  background: linear-gradient(135deg,
+      rgba(96, 165, 250, 0.9) 0%,
+      rgba(34, 211, 238, 0.85) 25%,
+      rgba(74, 222, 128, 0.85) 50%,
+      rgba(250, 204, 21, 0.85) 75%,
+      rgba(251, 146, 60, 0.9) 100%);
+  box-shadow:
+    0 20px 60px rgba(96, 165, 250, 0.3),
+    0 10px 30px rgba(74, 222, 128, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* 彩虹渐变卡片 - 阴影层 */
+.rainbow-card-shadow {
+  background: linear-gradient(135deg,
+      rgba(251, 146, 60, 0.7) 0%,
+      rgba(250, 204, 21, 0.6) 25%,
+      rgba(74, 222, 128, 0.6) 50%,
+      rgba(34, 211, 238, 0.6) 75%,
+      rgba(96, 165, 250, 0.7) 100%);
+}
+
+/* 可爱按钮样式 */
+.kawaii-btn {
+  font-family: 'Quicksand', sans-serif;
+  font-weight: 700;
+  border-radius: 9999px;
+  padding: 14px 32px;
+  font-size: 1.1rem;
+  box-shadow:
+    0 4px 15px rgba(0, 0, 0, 0.15),
+    inset 0 2px 0 rgba(255, 255, 255, 0.3);
+  transition: all 0.2s ease;
+}
+
+.kawaii-btn:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.2),
+    inset 0 2px 0 rgba(255, 255, 255, 0.3);
+}
+
+.kawaii-btn:active {
+  transform: translateY(0);
+}
+
+.kawaii-btn-green {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+}
+
+.kawaii-btn-orange {
+  background: linear-gradient(135deg, #fb923c 0%, #ea580c 100%);
+  color: white;
+}
+
+.kawaii-btn-gray {
+  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+  color: white;
+}
+
+/* 可爱云朵样式 */
+.kawaii-cloud {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+}
+
+/* 进度条渐变 */
+.progress-gradient {
+  background: linear-gradient(90deg, #22d3ee 0%, #60a5fa 100%);
+}
+
+/* 装饰性 blob */
+.blob-pink {
+  background: radial-gradient(circle, rgba(255, 182, 193, 0.6) 0%, rgba(255, 182, 193, 0.2) 70%, transparent 100%);
+}
+
+.blob-purple {
+  background: radial-gradient(circle, rgba(221, 160, 221, 0.5) 0%, rgba(221, 160, 221, 0.15) 70%, transparent 100%);
+}
+
+.blob-blue {
+  background: radial-gradient(circle, rgba(135, 206, 250, 0.5) 0%, rgba(135, 206, 250, 0.15) 70%, transparent 100%);
+}
+
+.blob-orange {
+  background: radial-gradient(circle, rgba(255, 218, 185, 0.6) 0%, rgba(255, 218, 185, 0.2) 70%, transparent 100%);
+}
+
+/* 退出按钮样式 */
+.exit-btn {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 2px solid rgba(239, 68, 68, 0.3);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.exit-btn:hover {
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
+/* 速度选择器样式 */
+.speed-selector {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  border-radius: 9999px;
+  padding: 4px 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}

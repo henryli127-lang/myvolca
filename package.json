@@ -21,16 +21,18 @@
     "next": "^14.0.0",
     "playwright": "^1.57.0",
     "react": "^18.2.0",
-    "sharp": "^0.33.0",
     "react-dom": "^18.2.0",
     "recharts": "^3.6.0",
+    "sharp": "^0.33.0",
     "utf-8-validate": "^6.0.3",
-    "ws": "^8.18.3"
+    "uuid": "^13.0.0",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/uuid": "^10.0.0",
     "@types/ws": "^8.18.1",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.31",

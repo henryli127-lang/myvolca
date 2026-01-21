@@ -348,175 +348,232 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-50 via-blue-50 to-indigo-50 p-4">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 transform transition-all hover:scale-105">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-indigo-600 mb-2">
-            {isLogin ? '欢迎回来！' : '开始学习之旅'}
-          </h1>
-          <p className="text-sky-600 text-sm">🎓 GSL&AWL单词学习平台</p>
-        </div>
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+      {/* 背景渐变 */}
+      <div className="absolute inset-0 bg-gradient-to-b from-pink-200 via-sky-200 to-green-300" />
+      
+      {/* 低多边形山脉背景 */}
+      <div className="absolute inset-0">
+        {/* 远处的山 */}
+        <svg className="absolute bottom-0 w-full h-2/3" viewBox="0 0 1440 600" preserveAspectRatio="none">
+          {/* 粉色山脉（最远） */}
+          <polygon fill="#f9a8d4" points="0,600 200,300 400,450 600,250 800,400 1000,200 1200,350 1440,150 1440,600" opacity="0.6" />
+          {/* 紫色山脉 */}
+          <polygon fill="#c4b5fd" points="0,600 150,400 350,500 500,350 700,480 900,300 1100,450 1300,280 1440,400 1440,600" opacity="0.5" />
+          {/* 蓝色山脉 */}
+          <polygon fill="#93c5fd" points="0,600 100,450 300,520 450,400 650,500 850,380 1050,500 1250,400 1440,500 1440,600" opacity="0.6" />
+          {/* 绿色草地（最近） */}
+          <polygon fill="#86efac" points="0,600 0,520 200,550 400,500 600,560 800,480 1000,540 1200,490 1440,530 1440,600" />
+          <polygon fill="#4ade80" points="0,600 0,560 150,580 350,540 550,590 750,530 950,570 1150,520 1350,560 1440,550 1440,600" />
+        </svg>
+        {/* 云朵 */}
+        <div className="absolute top-10 left-20 w-32 h-16 bg-white/40 rounded-full blur-xl" />
+        <div className="absolute top-20 right-32 w-40 h-20 bg-white/30 rounded-full blur-xl" />
+        <div className="absolute top-5 right-1/4 w-24 h-12 bg-white/50 rounded-full blur-lg" />
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {!isLogin && (
-            <div>
-              <label className="block text-sm font-semibold text-sky-700 mb-2">
-                👤 角色选择
-              </label>
-              <div className="flex gap-4">
+      {/* 装饰图标 */}
+      {/* 左上角 - 铅笔 */}
+      <div className="absolute top-16 left-16 md:left-24 text-6xl md:text-7xl transform -rotate-45 drop-shadow-lg animate-bounce" style={{ animationDuration: '3s' }}>
+        ✏️
+      </div>
+      {/* 右上角 - 书本 */}
+      <div className="absolute top-16 right-16 md:right-24 text-6xl md:text-7xl transform rotate-12 drop-shadow-lg animate-bounce" style={{ animationDuration: '2.5s', animationDelay: '0.5s' }}>
+        📖
+      </div>
+      {/* 左下角 - ABC积木 */}
+      <div className="absolute bottom-24 left-16 md:left-24 text-6xl md:text-7xl drop-shadow-lg animate-bounce" style={{ animationDuration: '2.8s', animationDelay: '0.3s' }}>
+        🔤
+      </div>
+      {/* 右下角 - 放大镜 */}
+      <div className="absolute bottom-24 right-16 md:right-24 text-6xl md:text-7xl drop-shadow-lg animate-bounce" style={{ animationDuration: '3.2s', animationDelay: '0.7s' }}>
+        🔍
+      </div>
+
+      {/* 登录卡片 */}
+      <div className="relative z-10 w-full max-w-md mx-4">
+        <div className="relative">
+          {/* 卡片外发光效果 */}
+          <div className="absolute -inset-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-cyan-400 rounded-3xl blur-sm opacity-75" />
+          
+          {/* 主卡片 */}
+          <div className="relative bg-gradient-to-br from-white via-gray-50 to-blue-50 rounded-3xl p-8 shadow-2xl border-4 border-cyan-300/50">
+            {/* 纹理背景 */}
+            <div className="absolute inset-0 rounded-3xl opacity-30" style={{ 
+              backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(0,0,0,0.05) 1px, transparent 0)',
+              backgroundSize: '16px 16px'
+            }} />
+            
+            <div className="relative">
+              {/* 标题 */}
+              <div className="text-center mb-8">
+                <h1 className="text-4xl font-extrabold mb-2" style={{ fontFamily: 'Comic Sans MS, cursive, sans-serif' }}>
+                  <span className="text-cyan-500 drop-shadow-sm">{isLogin ? 'Welcome ' : 'Join '}</span>
+                  <span className="text-yellow-400 drop-shadow-sm">{isLogin ? 'Back!' : 'Us!'}</span>
+                </h1>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {/* 注册时的角色选择 */}
+                {!isLogin && (
+                  <div>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRole('child')
+                          setChildEmail('')
+                          setChildExists(null)
+                          setError('')
+                        }}
+                        className={`flex-1 py-3 px-4 rounded-full font-bold transition-all text-sm ${
+                          role === 'child'
+                            ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-white shadow-lg scale-105'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        👶 Student
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRole('parent')
+                          setError('')
+                        }}
+                        className={`flex-1 py-3 px-4 rounded-full font-bold transition-all text-sm ${
+                          role === 'parent'
+                            ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-white shadow-lg scale-105'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        👨‍👩‍👧 Parent
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 邮箱输入 */}
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-cyan-400">
+                    ✉️
+                  </div>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="w-full pl-12 pr-4 py-4 rounded-full border-2 border-cyan-200 focus:border-cyan-400 focus:outline-none text-gray-700 bg-white/80 transition-all placeholder-gray-400 text-base"
+                    placeholder="Email"
+                  />
+                </div>
+
+                {/* 注册时家长需要输入孩子邮箱 */}
+                {!isLogin && role === 'parent' && (
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-cyan-400">
+                      👶
+                    </div>
+                    <input
+                      type="email"
+                      value={childEmail}
+                      onChange={(e) => setChildEmail(e.target.value)}
+                      required
+                      className={`w-full pl-12 pr-4 py-4 rounded-full border-2 transition-all bg-white/80 text-gray-700 placeholder-gray-400 text-base ${
+                        childExists === false
+                          ? 'border-red-300 focus:border-red-400'
+                          : childExists === true
+                          ? 'border-green-300 focus:border-green-400'
+                          : 'border-cyan-200 focus:border-cyan-400'
+                      } focus:outline-none`}
+                      placeholder="Child's Email"
+                    />
+                    {checkingChild && (
+                      <p className="text-xs text-cyan-500 mt-2 ml-4 flex items-center">
+                        <span className="animate-spin mr-1">⏳</span> Checking...
+                      </p>
+                    )}
+                    {childExists === true && (
+                      <p className="text-xs text-green-600 mt-2 ml-4">✅ Child account found</p>
+                    )}
+                    {childExists === false && (
+                      <p className="text-xs text-red-500 mt-2 ml-4">⚠️ Child must register first</p>
+                    )}
+                  </div>
+                )}
+
+                {/* 密码输入 */}
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-yellow-500">
+                    🔑
+                  </div>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full pl-12 pr-4 py-4 rounded-full border-2 border-cyan-200 focus:border-cyan-400 focus:outline-none text-gray-700 bg-white/80 transition-all placeholder-gray-400 text-base"
+                    placeholder="Password"
+                  />
+                </div>
+
+                {/* 错误提示 */}
+                {error && (
+                  <div className="bg-red-50 border-2 border-red-200 text-red-600 px-4 py-3 rounded-2xl text-sm">
+                    ⚠️ {error}
+                  </div>
+                )}
+
+                {/* 成功提示 */}
+                {message && (
+                  <div className="bg-green-50 border-2 border-green-200 text-green-600 px-4 py-3 rounded-2xl text-sm">
+                    ✅ {message}
+                  </div>
+                )}
+
+                {/* 提交按钮 */}
+                <button
+                  type="submit"
+                  disabled={loading || (!isLogin && role === 'parent' && childExists !== true)}
+                  className="w-full bg-gradient-to-r from-cyan-400 via-blue-500 to-cyan-400 hover:from-cyan-500 hover:via-blue-600 hover:to-cyan-500 text-white font-bold py-4 px-6 rounded-full shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none text-lg"
+                  style={{ boxShadow: '0 4px 15px rgba(6, 182, 212, 0.4)' }}
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center">
+                      <span className="animate-spin mr-2">⏳</span>
+                      Processing...
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center">
+                      {isLogin ? 'Login' : 'Sign up'}
+                      <span className="ml-2">→</span>
+                    </span>
+                  )}
+                </button>
+              </form>
+
+              {/* 切换登录/注册 */}
+              <div className="mt-6 text-center">
+                <span className="text-gray-500 text-sm">
+                  {isLogin ? "Don't have an account? " : "Already have an account? "}
+                </span>
                 <button
                   type="button"
                   onClick={() => {
+                    setIsLogin(!isLogin)
+                    setError('')
+                    setMessage('')
                     setRole('child')
                     setChildEmail('')
                     setChildExists(null)
-                    setError('')
                   }}
-                  className={`flex-1 py-3 px-4 rounded-2xl font-semibold transition-all ${
-                    role === 'child'
-                      ? 'bg-sky-500 text-white shadow-lg'
-                      : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
-                  }`}
+                  className="text-cyan-500 hover:text-cyan-600 font-bold transition-colors text-sm underline decoration-2 underline-offset-2"
                 >
-                  👶 孩子
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRole('parent')
-                    setError('')
-                  }}
-                  className={`flex-1 py-3 px-4 rounded-2xl font-semibold transition-all ${
-                    role === 'parent'
-                      ? 'bg-sky-500 text-white shadow-lg'
-                      : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
-                  }`}
-                >
-                  👨‍👩‍👧 家长
+                  {isLogin ? 'Sign up!' : 'Login!'}
                 </button>
               </div>
             </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-semibold text-sky-700 mb-2">
-              📧 邮箱地址
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-3 rounded-2xl border-2 border-sky-200 focus:border-sky-500 focus:outline-none text-sky-700 transition-all"
-              placeholder="your@email.com"
-            />
           </div>
-
-          {!isLogin && role === 'parent' && (
-            <div>
-              <label className="block text-sm font-semibold text-sky-700 mb-2">
-                👶 孩子的注册邮箱 <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                value={childEmail}
-                onChange={(e) => setChildEmail(e.target.value)}
-                required
-                className={`w-full px-4 py-3 rounded-2xl border-2 transition-all ${
-                  childExists === false
-                    ? 'border-red-300 focus:border-red-500'
-                    : childExists === true
-                    ? 'border-green-300 focus:border-green-500'
-                    : 'border-sky-200 focus:border-sky-500'
-                } focus:outline-none text-sky-700`}
-                placeholder="child@example.com"
-              />
-              {checkingChild && (
-                <p className="text-xs text-sky-500 mt-1 flex items-center">
-                  <span className="animate-spin mr-1">⏳</span>
-                  正在检查...
-                </p>
-              )}
-              {childExists === true && (
-                <p className="text-xs text-green-600 mt-1 flex items-center">
-                  ✅ 找到该孩子的账户
-                </p>
-              )}
-              {childExists === false && (
-                <p className="text-xs text-red-600 mt-1">
-                  ⚠️ 未找到该孩子的账户，请让孩子先完成注册
-                </p>
-              )}
-              {!checkingChild && childExists === null && childEmail && (
-                <p className="text-xs text-sky-500 mt-1">
-                  请输入孩子已注册的邮箱地址
-                </p>
-              )}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-semibold text-sky-700 mb-2">
-              🔒 密码
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-              className="w-full px-4 py-3 rounded-2xl border-2 border-sky-200 focus:border-sky-500 focus:outline-none text-sky-700 transition-all"
-              placeholder="至少6个字符"
-            />
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border-2 border-red-200 text-red-700 px-4 py-3 rounded-2xl animate-pulse">
-              ⚠️ {error}
-            </div>
-          )}
-
-          {message && (
-            <div className="bg-green-50 border-2 border-green-200 text-green-700 px-4 py-3 rounded-2xl">
-              ✅ {message}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading || (role === 'parent' && childExists !== true)}
-            className="w-full bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-bold py-4 px-6 rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center">
-                <span className="animate-spin mr-2">⏳</span>
-                处理中...
-              </span>
-            ) : (
-              isLogin ? '🚀 登录' : '✨ 注册'
-            )}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <button
-            type="button"
-            onClick={() => {
-              setIsLogin(!isLogin)
-              setError('')
-              setMessage('')
-              setRole('child')
-              setChildEmail('')
-              setChildExists(null)
-            }}
-            className="text-sky-600 hover:text-sky-700 font-semibold transition-colors"
-          >
-            {isLogin ? '还没有账号？点击注册 👉' : '已有账号？点击登录 👉'}
-          </button>
-        </div>
-        <div className="text-center text-sm text-sky-600">
-          <p> </p>
-          <p>© 2025 EmiliaEdu. All rights reserved.</p>
         </div>
       </div>
     </div>

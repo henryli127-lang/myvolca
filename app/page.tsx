@@ -23,7 +23,7 @@ interface TestResults {
   spellingTotal: number
   translationErrors: number
   spellingErrors: number
-  testWords: Array<{ 
+  testWords: Array<{
     id: number
     word: string
     translation: string
@@ -43,20 +43,21 @@ export default function Home() {
   const [userProfile, setUserProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [profileError, setProfileError] = useState(false)
-  
+
   // 使用 ref 来追踪“正在获取”状态，避免 React 渲染周期的干扰
   const isFetchingProfile = useRef(false)
 
   const [showSettings, setShowSettings] = useState(false)
+
   const [appStage, setAppStage] = useState<AppStage>('dashboard')
   const [testResults, setTestResults] = useState<TestResults | null>(null)
   const [testWords, setTestWords] = useState<TestWord[]>([])
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null)
   const [sessionKey, setSessionKey] = useState<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   const sessionStartTime = useRef<Date>(new Date())
-  const sessionId = useRef<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`) 
+  const sessionId = useRef<string>(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const INACTIVITY_TIMEOUT = 10 * 60 * 1000 
+  const INACTIVITY_TIMEOUT = 10 * 60 * 1000
 
   const checkTestProgress = (userId: string) => {
     if (typeof window === 'undefined') return false
@@ -195,10 +196,10 @@ export default function Home() {
   // ==========================================
   useEffect(() => {
     const fetchProfile = async () => {
-      console.log('📋 fetchProfile 开始执行', { 
-        hasUser: !!user, 
-        hasUserProfile: !!userProfile, 
-        isFetching: isFetchingProfile.current 
+      console.log('📋 fetchProfile 开始执行', {
+        hasUser: !!user,
+        hasUserProfile: !!userProfile,
+        isFetching: isFetchingProfile.current
       })
 
       // 各种卫语句：如果没有用户，或者已经有资料，或者正在获取，都直接退出
@@ -222,12 +223,12 @@ export default function Home() {
         setLoading(true)
         setProfileError(false) // 重置错误状态
         console.log('🚀 开始获取用户资料...')
-        
+
         // 添加超时保护（10秒）
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => reject(new Error('获取用户资料超时')), 10000)
         })
-        
+
         // 直接请求，带超时保护
         const profilePromise = profiles.get(user.id)
         const result = await Promise.race([profilePromise, timeoutPromise]) as any
@@ -236,11 +237,11 @@ export default function Home() {
         console.log('📋 fetchProfile: 获取结果', { hasProfile: !!profile, error })
 
         if (error) {
-           console.error('获取资料出错:', error)
-           // PGRST116 只是代表没找到记录（可能是新用户数据还没写入），不是系统错误
-           if (error.code !== 'PGRST116') {
-             setProfileError(true)
-           }
+          console.error('获取资料出错:', error)
+          // PGRST116 只是代表没找到记录（可能是新用户数据还没写入），不是系统错误
+          if (error.code !== 'PGRST116') {
+            setProfileError(true)
+          }
         }
 
         if (profile) {
@@ -390,67 +391,67 @@ export default function Home() {
     }
   }
 
-// ... (保留上面的代码)
-// ... 替换原有的 handleLogout 函数 ...
-const handleLogout = async (force: boolean = false) => {
-  console.log(`执行登出流程 (强制: ${force})...`)
-  
-  // 1. 立即清除无操作定时器
-  if (inactivityTimerRef.current) {
-    clearTimeout(inactivityTimerRef.current)
-    inactivityTimerRef.current = null
-  }
+  // ... (保留上面的代码)
+  // ... 替换原有的 handleLogout 函数 ...
+  const handleLogout = async (force: boolean = false) => {
+    console.log(`执行登出流程 (强制: ${force})...`)
 
-  // 2. 强制保存学习记录 (串行等待)
-  // 只要不是强制退出且用户存在，就尝试保存，不进行 Session 预检查，不设置超时跳过
-  if (!force && user && !profileError) {
-    try {
-      console.log('正在保存学习记录...')
-      // ✅ 关键：直接 await，死等数据库响应。
-      // 这确保了在 Token 被清除前，写入请求一定已经完成了。
-      await logStudyDuration()
-      console.log('✅ 学习记录保存步骤结束')
-    } catch (error) {
-      // 即使报错（如断网），也只打印日志，然后继续执行下面的登出，防止用户退不出来
-      console.error('保存学习记录时出错:', error)
+    // 1. 立即清除无操作定时器
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current)
+      inactivityTimerRef.current = null
     }
-  }
 
-  // 3. 执行登出 (清理 Session)
-  try { 
-    console.log('正在执行 Supabase 登出...')
-    await auth.signOut() 
-  } catch(e) {
-    console.error('Supabase 登出出错:', e)
-  }
-
-  // 4. 清理本地状态 (UI 重置)
-  if (typeof window !== 'undefined' && user) {
+    // 2. 强制保存学习记录 (串行等待)
+    // 只要不是强制退出且用户存在，就尝试保存，不进行 Session 预检查，不设置超时跳过
+    if (!force && user && !profileError) {
       try {
-          localStorage.removeItem(`test_progress_${user.id}`)
-          localStorage.removeItem(`word_list_${user.id}`)
-          localStorage.removeItem(`learning_progress_${user.id}`)
-          localStorage.removeItem(`report_progress_${user.id}`)
-      } catch (e) { }
-  }
+        console.log('正在保存学习记录...')
+        // ✅ 关键：直接 await，死等数据库响应。
+        // 这确保了在 Token 被清除前，写入请求一定已经完成了。
+        await logStudyDuration()
+        console.log('✅ 学习记录保存步骤结束')
+      } catch (error) {
+        // 即使报错（如断网），也只打印日志，然后继续执行下面的登出，防止用户退不出来
+        console.error('保存学习记录时出错:', error)
+      }
+    }
 
-  // 5. 重置 React 状态
-  setUser(null)
-  setUserProfile(null)
-  setProfileError(false)
-  setAppStage('dashboard')
-  setLoading(false)
-  isFetchingProfile.current = false
-  
-  // 重置会话 ID，为下一次登录做准备
-  sessionStartTime.current = new Date()
-  sessionId.current = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-}  // 注意：已移除自动登出逻辑，用户不会被自动logout
+    // 3. 执行登出 (清理 Session)
+    try {
+      console.log('正在执行 Supabase 登出...')
+      await auth.signOut()
+    } catch (e) {
+      console.error('Supabase 登出出错:', e)
+    }
+
+    // 4. 清理本地状态 (UI 重置)
+    if (typeof window !== 'undefined' && user) {
+      try {
+        localStorage.removeItem(`test_progress_${user.id}`)
+        localStorage.removeItem(`word_list_${user.id}`)
+        localStorage.removeItem(`learning_progress_${user.id}`)
+        localStorage.removeItem(`report_progress_${user.id}`)
+      } catch (e) { }
+    }
+
+    // 5. 重置 React 状态
+    setUser(null)
+    setUserProfile(null)
+    setProfileError(false)
+    setAppStage('dashboard')
+    setLoading(false)
+    isFetchingProfile.current = false
+
+    // 重置会话 ID，为下一次登录做准备
+    sessionStartTime.current = new Date()
+    sessionId.current = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }  // 注意：已移除自动登出逻辑，用户不会被自动logout
   // 用户必须手动点击退出按钮才会登出
 
   // 页面切换
   useEffect(() => {
-    const handleBeforeUnload = () => { if(user) logStudyDuration() }
+    const handleBeforeUnload = () => { if (user) logStudyDuration() }
     const handleVisibilityChange = () => {
       if (document.hidden && user) {
         logStudyDuration()
@@ -502,10 +503,10 @@ const handleLogout = async (force: boolean = false) => {
   }
 
   const handleChallengeComplete = async (results: TestResults) => {
-    console.log('📝 测试完成，开始处理结果:', { 
-      hasResults: !!results, 
+    console.log('📝 测试完成，开始处理结果:', {
+      hasResults: !!results,
       testWordsCount: results?.testWords?.length || 0,
-      userId: user?.id 
+      userId: user?.id
     })
 
     try {
@@ -534,18 +535,18 @@ const handleLogout = async (force: boolean = false) => {
       if (user && validTestWords.length > 0) {
         console.log('💾 开始保存测试结果到数据库...')
         console.log(`📋 需要保存的单词列表:`, validTestWords.map(w => ({ id: w.id, word: w.word })))
-        
+
         try {
           const saveResults = await Promise.allSettled(validTestWords.map(async (word, index) => {
             const transErrorCount = word.translationError ? 1 : 0
             const spellErrorCount = word.spellingError ? 1 : 0
             // 根据是否有错误决定status：如果有错误则保持'learning'，如果没有错误则标记为'mastered'
             const status = (transErrorCount === 0 && spellErrorCount === 0) ? 'mastered' : 'learning'
-            
+
             console.log(`  [${index + 1}/${validTestWords.length}] 保存单词: ID=${word.id}, word="${word.word}", errors=${transErrorCount + spellErrorCount}, status=${status}`)
-            
+
             const { data, error } = await userProgress.updateTestResults(word.id, transErrorCount, spellErrorCount, status)
-            
+
             if (error) {
               console.error(`  ❌ 保存单词 ${word.id} (${word.word}) 失败:`, error)
               return { wordId: word.id, word: word.word, success: false, error }
@@ -554,13 +555,13 @@ const handleLogout = async (force: boolean = false) => {
               return { wordId: word.id, word: word.word, success: true, error: null }
             }
           }))
-          
+
           // 统计保存结果
           const successCount = saveResults.filter(r => r.status === 'fulfilled' && r.value.success).length
           const failedCount = saveResults.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)).length
-          
+
           console.log(`📊 保存结果统计: 成功 ${successCount}/${validTestWords.length}, 失败 ${failedCount}/${validTestWords.length}`)
-          
+
           // 打印失败的单词详情
           saveResults.forEach((result, index) => {
             if (result.status === 'rejected') {
@@ -569,7 +570,7 @@ const handleLogout = async (force: boolean = false) => {
               console.error(`  ❌ 单词 ${result.value.wordId} (${result.value.word}) 保存失败:`, result.value.error)
             }
           })
-          
+
           if (failedCount > 0) {
             console.warn(`⚠️ 有 ${failedCount} 个单词保存失败，请检查数据库连接和RPC函数`)
           } else {
@@ -587,7 +588,7 @@ const handleLogout = async (force: boolean = false) => {
       setTestResults(results)
       setTestWords(validTestWords)
       setSessionKey(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
-      
+
       // 3. 保存成绩单状态到 localStorage，以便退出后再次登录能恢复
       if (typeof window !== 'undefined' && user) {
         try {
@@ -610,8 +611,8 @@ const handleLogout = async (force: boolean = false) => {
           localStorage.removeItem(`word_list_${user.id}`)
           localStorage.removeItem(`learning_progress_${user.id}`)
           console.log('✅ 测试进度缓存已清除')
-        } catch (error) { 
-          console.error('⚠️ 清除缓存失败:', error) 
+        } catch (error) {
+          console.error('⚠️ 清除缓存失败:', error)
         }
       }
 
@@ -619,7 +620,7 @@ const handleLogout = async (force: boolean = false) => {
       console.log('📊 跳转到成绩单页面...')
       setAppStage('report')
       console.log('✅ 测试完成处理完毕')
-      
+
     } catch (error) {
       console.error('❌ 处理测试完成时发生错误:', error)
       // 即使出错，也尝试跳转到成绩单页面
@@ -640,7 +641,7 @@ const handleLogout = async (force: boolean = false) => {
     // 不清除 testWords，因为可能还有阅读进度需要恢复
     // setTestWords([])
     setSessionKey(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
-    
+
     // 清除成绩单进度，因为用户已经查看过了
     if (typeof window !== 'undefined' && user) {
       try {
@@ -662,7 +663,7 @@ const handleLogout = async (force: boolean = false) => {
     setting?: any
   }) => {
     if (!user) return
-    
+
     try {
       const { error } = await articles.save(user.id, article)
       if (error) {
@@ -735,13 +736,13 @@ const handleLogout = async (force: boolean = false) => {
         <h2 className="text-2xl font-bold text-red-600 mb-2">无法加载用户资料</h2>
         <p className="text-gray-600 mb-6">请检查网络连接或刷新页面。</p>
         <div className="flex gap-4">
-          <button 
+          <button
             onClick={() => window.location.reload()}
             className="px-6 py-2 bg-blue-500 text-white rounded-full shadow hover:bg-blue-600 transition"
           >
             刷新
           </button>
-          <button 
+          <button
             onClick={() => handleLogout(true)}
             className="px-6 py-2 bg-gray-500 text-white rounded-full shadow hover:bg-gray-600 transition"
           >
@@ -769,7 +770,7 @@ const handleLogout = async (force: boolean = false) => {
   return (
     <div className="min-h-screen font-quicksand">
       {/* 设置按钮已移除，现在由StudentDashboard组件内的三个图标替代 */}
-      
+
       <AnimatePresence mode="wait">
         {appStage === 'transition' && (
           <motion.div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

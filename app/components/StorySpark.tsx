@@ -6,7 +6,7 @@ import { SelectionItem, QuizQuestion, StoryState, GenerationStatus } from '../ty
 import { Volume2, VolumeX } from 'lucide-react'
 
 interface StorySparkProps {
-  testWords: Array<{ 
+  testWords: Array<{
     id: number
     word: string
     translation: string
@@ -180,7 +180,7 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
   // 保存阅读状态到 localStorage
   const saveReadingProgress = useCallback((clearProgress = false, quizCompleted = false) => {
     if (typeof window === 'undefined') return
-    
+
     try {
       if (clearProgress) {
         // 清除阅读进度（quiz完成后）
@@ -206,12 +206,12 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
   // 恢复阅读状态
   useEffect(() => {
     if (hasRestoredProgress) return
-    
+
     if (typeof window === 'undefined') {
       setHasRestoredProgress(true)
       return
     }
-    
+
     try {
       const saved = localStorage.getItem('reading_progress')
       if (saved) {
@@ -257,7 +257,7 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
             const savedWords = new Set<string>(parsed.testWords.map((w: any) => (w.word?.toLowerCase() || '').toString()))
             const currentWords = new Set<string>(testWords.map(w => w.word.toLowerCase()))
             const hasOverlap = Array.from(savedWords).some((w: string) => currentWords.has(w))
-            
+
             if (hasOverlap || parsed.testWords.length === testWords.length) {
               // 恢复状态，即使 testWords 不完全匹配，只要有关键数据就恢复
               if (parsed.selectedCharacter) {
@@ -277,7 +277,7 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
               } else if (parsed.status) {
                 setStatus(parsed.status)
               }
-              
+
               console.log('已恢复阅读进度', {
                 hasCharacter: !!parsed.selectedCharacter,
                 hasSetting: !!parsed.selectedSetting,
@@ -328,11 +328,11 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
     const handleBeforeUnload = () => {
       saveReadingProgress(false, false) // 保存进度，标记quiz未完成
     }
-    
+
     if (typeof window !== 'undefined') {
       window.addEventListener('beforeunload', handleBeforeUnload)
     }
-    
+
     return () => {
       if (typeof window !== 'undefined') {
         window.removeEventListener('beforeunload', handleBeforeUnload)
@@ -366,12 +366,12 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
       }
 
       const result = await response.json()
-      
+
       // 生成故事图片
       let imageUrl: string | undefined
       let imageData: string | undefined
       let imageMimeType: string | undefined
-      
+
       try {
         const imageResponse = await fetch('/api/story-image', {
           method: 'POST',
@@ -385,7 +385,7 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
             setting: selectedSetting,
           }),
         })
-        
+
         if (imageResponse.ok) {
           const imageResult = await imageResponse.json()
           console.log('图片生成结果:', { hasImageUrl: !!imageResult.imageUrl, hasImageData: !!imageResult.imageData })
@@ -397,125 +397,125 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
             // 如果有base64数据，先使用base64显示，然后异步上传OSS
             imageData = imageResult.imageData
             imageMimeType = imageResult.mimeType || 'image/png'
-            
+
             // 异步上传base64图片到OSS（不阻塞UI）
             // 先显示故事，然后后台上传
             console.log('开始异步上传图片到OSS...')
-            ;(async () => {
-              try {
-                // 将base64转换为Blob
-                const byteCharacters = atob(imageResult.imageData)
-                const byteNumbers = new Array(byteCharacters.length)
-                for (let i = 0; i < byteCharacters.length; i++) {
-                  byteNumbers[i] = byteCharacters.charCodeAt(i)
-                }
-                const byteArray = new Uint8Array(byteNumbers)
-                const blob = new Blob([byteArray], { type: imageResult.mimeType || 'image/png' })
-                console.log('Blob创建成功，大小:', blob.size)
-                
-                // 创建FormData上传到OSS
-                const formData = new FormData()
-                formData.append('file', blob, `story-${Date.now()}.png`)
-                
-                // 异步上传OSS（不阻塞）
-                console.log('发送OSS上传请求...')
-                const uploadResponse = await fetch('/api/upload-oss', {
-                  method: 'POST',
-                  body: formData,
-                })
-                console.log('OSS上传响应状态:', uploadResponse.status, uploadResponse.ok)
-                
-                if (uploadResponse.ok) {
-                  const uploadResult = await uploadResponse.json()
-                  const ossUrl = uploadResult.url
-                  console.log('图片已成功上传到OSS:', ossUrl)
-                  
-                  // 上传成功后，更新story状态，使用OSS URL替换base64
-                  setStory(prevStory => {
-                    if (prevStory) {
-                      return {
-                        ...prevStory,
-                        imageUrl: ossUrl,
-                        imageData: undefined, // 清空base64数据
-                        imageMimeType: undefined,
-                      }
-                    }
-                    return prevStory
-                  })
-                  
-                  // OSS上传成功后，保存文章到图书馆（此时imageUrl已确定）
-                  if (onSaveArticle) {
-                    const htmlContent = generateHtmlContent(result.title, result.content, result.quiz || [], ossUrl)
-                    onSaveArticle({
-                      title: result.title,
-                      content: result.content,
-                      htmlContent,
-                      imageUrl: ossUrl, // 使用OSS URL
-                      quiz: result.quiz,
-                      character: selectedCharacter,
-                      setting: selectedSetting,
-                    }).then(() => {
-                      console.log('文章已保存到图书馆，图片URL:', ossUrl)
-                    }).catch((err) => {
-                      console.error('保存文章到图书馆失败:', err)
-                    })
+              ; (async () => {
+                try {
+                  // 将base64转换为Blob
+                  const byteCharacters = atob(imageResult.imageData)
+                  const byteNumbers = new Array(byteCharacters.length)
+                  for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i)
                   }
-                } else {
-                  const errorData = await uploadResponse.json().catch(() => ({ error: 'Upload failed' }))
-                  console.error('上传图片到OSS失败:', errorData)
-                  // 上传失败时，仍然保存文章（没有图片URL）
+                  const byteArray = new Uint8Array(byteNumbers)
+                  const blob = new Blob([byteArray], { type: imageResult.mimeType || 'image/png' })
+                  console.log('Blob创建成功，大小:', blob.size)
+
+                  // 创建FormData上传到OSS
+                  const formData = new FormData()
+                  formData.append('file', blob, `story-${Date.now()}.png`)
+
+                  // 异步上传OSS（不阻塞）
+                  console.log('发送OSS上传请求...')
+                  const uploadResponse = await fetch('/api/upload-oss', {
+                    method: 'POST',
+                    body: formData,
+                  })
+                  console.log('OSS上传响应状态:', uploadResponse.status, uploadResponse.ok)
+
+                  if (uploadResponse.ok) {
+                    const uploadResult = await uploadResponse.json()
+                    const ossUrl = uploadResult.url
+                    console.log('图片已成功上传到OSS:', ossUrl)
+
+                    // 上传成功后，更新story状态，使用OSS URL替换base64
+                    setStory(prevStory => {
+                      if (prevStory) {
+                        return {
+                          ...prevStory,
+                          imageUrl: ossUrl,
+                          imageData: undefined, // 清空base64数据
+                          imageMimeType: undefined,
+                        }
+                      }
+                      return prevStory
+                    })
+
+                    // OSS上传成功后，保存文章到图书馆（此时imageUrl已确定）
+                    if (onSaveArticle) {
+                      const htmlContent = generateHtmlContent(result.title, result.content, result.quiz || [], ossUrl)
+                      onSaveArticle({
+                        title: result.title,
+                        content: result.content,
+                        htmlContent,
+                        imageUrl: ossUrl, // 使用OSS URL
+                        quiz: result.quiz,
+                        character: selectedCharacter,
+                        setting: selectedSetting,
+                      }).then(() => {
+                        console.log('文章已保存到图书馆，图片URL:', ossUrl)
+                      }).catch((err) => {
+                        console.error('保存文章到图书馆失败:', err)
+                      })
+                    }
+                  } else {
+                    const errorData = await uploadResponse.json().catch(() => ({ error: 'Upload failed' }))
+                    console.error('上传图片到OSS失败:', errorData)
+                    // 上传失败时，仍然保存文章（没有图片URL）
+                    if (onSaveArticle) {
+                      console.log('OSS上传失败，保存文章（无图片URL）')
+                      const htmlContent = generateHtmlContent(result.title, result.content, result.quiz || [], undefined)
+                      onSaveArticle({
+                        title: result.title,
+                        content: result.content,
+                        htmlContent,
+                        imageUrl: undefined, // OSS上传失败，没有URL
+                        quiz: result.quiz,
+                        character: selectedCharacter,
+                        setting: selectedSetting,
+                      }).then(() => {
+                        console.log('文章已保存到图书馆（OSS上传失败，无图片URL）')
+                      }).catch((err) => {
+                        console.error('保存文章到图书馆失败:', err)
+                      })
+                    }
+                  }
+                } catch (uploadError) {
+                  console.error('上传图片到OSS异常:', uploadError)
+                  // 上传异常时，仍然保存文章（没有图片URL）
                   if (onSaveArticle) {
-                    console.log('OSS上传失败，保存文章（无图片URL）')
                     const htmlContent = generateHtmlContent(result.title, result.content, result.quiz || [], undefined)
                     onSaveArticle({
                       title: result.title,
                       content: result.content,
                       htmlContent,
-                      imageUrl: undefined, // OSS上传失败，没有URL
+                      imageUrl: undefined, // OSS上传异常，没有URL
                       quiz: result.quiz,
                       character: selectedCharacter,
                       setting: selectedSetting,
                     }).then(() => {
-                      console.log('文章已保存到图书馆（OSS上传失败，无图片URL）')
+                      console.log('文章已保存到图书馆（OSS上传异常，无图片URL）')
                     }).catch((err) => {
                       console.error('保存文章到图书馆失败:', err)
                     })
                   }
                 }
-              } catch (uploadError) {
-                console.error('上传图片到OSS异常:', uploadError)
-                // 上传异常时，仍然保存文章（没有图片URL）
-                if (onSaveArticle) {
-                  const htmlContent = generateHtmlContent(result.title, result.content, result.quiz || [], undefined)
-                  onSaveArticle({
-                    title: result.title,
-                    content: result.content,
-                    htmlContent,
-                    imageUrl: undefined, // OSS上传异常，没有URL
-                    quiz: result.quiz,
-                    character: selectedCharacter,
-                    setting: selectedSetting,
-                  }).then(() => {
-                    console.log('文章已保存到图书馆（OSS上传异常，无图片URL）')
-                  }).catch((err) => {
-                    console.error('保存文章到图书馆失败:', err)
-                  })
-                }
-              }
-            })()
+              })()
           }
         }
       } catch (imageError) {
         console.error('生成图片失败，继续显示故事:', imageError)
         // 图片生成失败不影响故事显示
       }
-      
+
       // 无论图片生成成功与否，都要保存文章
       // 如果图片生成失败，保存时imageUrl为undefined
       // 如果图片生成成功但OSS上传失败，也会在失败回调中保存
       // 如果图片生成成功且OSS上传成功，会在上传成功回调中保存
       // 但为了确保文章一定会被保存，我们在这里也添加一个兜底保存逻辑
-      
+
       // 先显示故事（使用base64图片，如果存在）
       setStory({
         title: result.title,
@@ -528,7 +528,7 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
         imageMimeType,
       })
       setStatus('success')
-      
+
       // 保存文章到图书馆的逻辑
       // 策略：等待OSS上传完成后再保存，确保imageUrl正确
       const saveArticleToLibrary = async (finalImageUrl?: string) => {
@@ -536,9 +536,9 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
           console.warn('⚠️ onSaveArticle未定义，无法保存文章')
           return
         }
-        
+
         const htmlContent = generateHtmlContent(result.title, result.content, result.quiz || [], finalImageUrl)
-        
+
         try {
           console.log('开始保存文章到图书馆，imageUrl:', finalImageUrl || '无')
           await onSaveArticle({
@@ -556,7 +556,7 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
           // 保存失败不影响故事显示
         }
       }
-      
+
       // 保存文章到图书馆的逻辑
       // 如果已经有imageUrl（直接返回的URL），立即保存
       if (imageUrl) {
@@ -566,7 +566,7 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
         // 上传逻辑在异步函数中，上传成功后会调用onSaveArticle
         // 如果OSS上传失败，也要保存文章（使用base64或没有图片）
         console.log('等待OSS上传完成后再保存文章...')
-        
+
         // 设置超时，如果OSS上传超时（30秒），仍然保存文章（可能没有图片URL）
         setTimeout(async () => {
           // 检查是否已经保存过（通过检查story状态）
@@ -620,46 +620,56 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
   const isSelectionComplete = !!selectedCharacter && !!selectedSetting
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20 p-6 font-quicksand">
+    <div className="min-h-screen bg-gradient-to-br from-kawaii-pink/30 via-kawaii-lavender/40 to-kawaii-sky/30 p-4 md:p-6 font-quicksand relative overflow-hidden">
+      {/* ===== 背景装饰层 ===== */}
+      <div className="absolute top-0 left-0 w-80 h-80 blob-pink rounded-full blur-3xl -translate-x-1/3 -translate-y-1/4 animate-blob" />
+      <div className="absolute top-1/4 right-0 w-96 h-96 blob-purple rounded-full blur-3xl translate-x-1/3 animate-blob" style={{ animationDelay: '2s' }} />
+      <div className="absolute bottom-0 left-1/4 w-72 h-72 blob-blue rounded-full blur-3xl translate-y-1/3 animate-blob" style={{ animationDelay: '4s' }} />
+      <div className="absolute bottom-1/4 right-1/4 w-64 h-64 blob-orange rounded-full blur-3xl animate-blob" style={{ animationDelay: '6s' }} />
+
       {/* 顶部按钮 */}
-      <div className="absolute top-4 right-4 z-10 flex items-center gap-3">
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-3">
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={handleBack}
-          className="bg-white/80 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
+          className="bg-white/60 backdrop-blur-md text-gray-700 px-4 py-2 rounded-xl shadow-sm border border-white/50 hover:bg-white/80 transition-all flex items-center gap-2 font-bold"
         >
           <span>🏠</span>
-          <span className="font-semibold">返回</span>
+          <span>Back</span>
         </motion.button>
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={onLogout}
-          className="bg-white/80 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
+          className="exit-btn px-4 py-2 rounded-xl text-gray-700 font-bold flex items-center gap-2"
         >
           <span>🚪</span>
-          <span className="font-semibold">退出</span>
+          <span>Exit</span>
         </motion.button>
       </div>
 
-      <div className="max-w-6xl mx-auto pt-16">
+      <div className="max-w-6xl mx-auto pt-16 relative z-10">
         {/* 标题 */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-8"
+          className="text-center mb-10"
         >
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-candy-blue to-candy-green bg-clip-text text-transparent mb-2">
-            📚 趣味阅读
-          </h1>
-          <p className="text-gray-600 text-lg">选择角色和场景，AI 会为你生成一个包含新学单词的精彩故事！</p>
+          <div className="inline-block relative">
+            <h1 className="text-5xl md:text-6xl font-black text-[#38bdf8] font-bubblegum drop-shadow-sm filter" style={{ textShadow: '3px 3px 0px #fff, 5px 5px 0px rgba(0,0,0,0.1)' }}>
+              ✨ Fun Reading ✨
+            </h1>
+          </div>
+          <p className="text-gray-600 text-lg mt-4 font-medium bg-white/30 inline-block px-6 py-2 rounded-full backdrop-blur-sm border border-white/40">
+            Pick a character & setting, and let's make a magic story! 🧚‍♀️
+          </p>
         </motion.div>
 
         {status === 'success' && story ? (
-          <StoryDisplay 
-            story={story} 
-            testWords={testWords} 
+          <StoryDisplay
+            story={story}
+            testWords={testWords}
             onReset={handleReset}
             onQuizComplete={() => saveReadingProgress(true, true)} // Quiz完成后清除阅读进度
           />
@@ -732,10 +742,10 @@ export default function StorySpark({ testWords, userId, onBack, onLogout, onSave
                 onClick={handleGenerate}
                 disabled={!isSelectionComplete || status === 'generating'}
                 className={`
-                  px-12 py-4 rounded-full font-bold text-xl shadow-xl transition-all duration-300
+                  kawaii-btn w-full md:w-auto px-12 py-4 text-xl flex items-center justify-center gap-3
                   ${!isSelectionComplete
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-candy-blue to-candy-green text-white hover:shadow-2xl'
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none'
+                    : 'kawaii-btn-green'
                   }
                 `}
               >
@@ -774,40 +784,42 @@ function SelectionCard({ item, isSelected, onSelect }: {
 }) {
   return (
     <motion.div
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
+      whileHover={{ scale: 1.03, y: -5 }}
+      whileTap={{ scale: 0.98 }}
       onClick={() => onSelect(item)}
       className={`
-        relative cursor-pointer rounded-2xl overflow-hidden transition-all duration-300
+        relative cursor-pointer rounded-3xl overflow-hidden transition-all duration-300
         ${isSelected
-          ? 'ring-4 ring-candy-blue shadow-2xl'
-          : 'hover:shadow-xl border-2 border-gray-200'
+          ? 'rainbow-card border-4 border-white shadow-[0_20px_40px_-5px_rgba(56,189,248,0.4)]'
+          : 'bg-white border-2 border-transparent hover:border-sky-200 shadow-md hover:shadow-xl'
         }
-        bg-white
       `}
     >
-      <div className="aspect-square w-full overflow-hidden">
+      <div className="aspect-square w-full overflow-hidden p-3 bg-white">
         <img
           src={item.imageUrl}
           alt={item.name}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover rounded-2xl"
           loading="lazy"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+        {/* 选中时的光效遮罩 */}
+        {isSelected && (
+          <div className="absolute inset-0 bg-gradient-to-t from-sky-400/30 to-transparent pointer-events-none" />
+        )}
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 p-4">
-        <h3 className={`font-bold text-lg mb-1 ${isSelected ? 'text-candy-blue' : 'text-white'}`}>
+      <div className={`p-4 text-center ${isSelected ? 'text-white' : 'text-gray-700'}`}>
+        <h3 className="font-bold text-xl mb-1 font-bubblegum tracking-wide">
           {item.name}
         </h3>
-        <p className="text-xs text-white/90 line-clamp-2">
+        <p className={`text-xs font-medium ${isSelected ? 'text-white/90' : 'text-gray-400'}`}>
           {item.description}
         </p>
       </div>
 
       {isSelected && (
-        <div className="absolute top-3 right-3 bg-candy-blue text-white rounded-full p-1.5 shadow-lg">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <div className="absolute top-4 right-4 bg-white text-sky-500 rounded-full p-1 shadow-lg animate-bounce">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
           </svg>
         </div>
@@ -817,12 +829,12 @@ function SelectionCard({ item, isSelected, onSelect }: {
 }
 
 // StoryDisplay 组件
-function StoryDisplay({ 
-  story, 
-  testWords, 
+function StoryDisplay({
+  story,
+  testWords,
   onReset,
   onQuizComplete
-}: { 
+}: {
   story: StoryState
   testWords: Array<{ id: number; word: string; translation: string }>
   onReset: () => void
@@ -836,7 +848,7 @@ function StoryDisplay({
 
   // 创建单词到翻译的映射（支持多种形式）
   const wordMap = useRef(new Map<string, string>())
-  
+
   // 创建单词到翻译的映射（支持多种形式）
   useEffect(() => {
     wordMap.current.clear()
@@ -888,13 +900,13 @@ function StoryDisplay({
   // 高亮并处理点击单词
   const processTextWithHighlights = useCallback((text: string) => {
     if (!text) return null
-    
+
     // 使用正则表达式匹配所有单词
     const wordRegex = /\b\w+\b/g
     const parts: Array<{ text: string; isWord: boolean }> = []
     let lastIndex = 0
     let match
-    
+
     while ((match = wordRegex.exec(text)) !== null) {
       // 添加单词前的非单词字符
       if (match.index > lastIndex) {
@@ -904,27 +916,27 @@ function StoryDisplay({
       parts.push({ text: match[0], isWord: true })
       lastIndex = match.index + match[0].length
     }
-    
+
     // 添加剩余的文本
     if (lastIndex < text.length) {
       parts.push({ text: text.substring(lastIndex), isWord: false })
     }
-    
+
     // 如果没有匹配到单词，直接返回原文本
     if (parts.length === 0) {
       return <span>{text}</span>
     }
-    
+
     return parts.map((part, index) => {
       if (!part.isWord) {
         return <span key={index}>{part.text}</span>
       }
-      
+
       // 是单词，检查是否是新学单词
       const wordLower = part.text.toLowerCase().trim()
       const isNewWord = wordMap.current.has(wordLower)
       const translation = isNewWord ? wordMap.current.get(wordLower) : null
-      
+
       return (
         <span
           key={`word-${index}-${part.text}`}
@@ -932,19 +944,19 @@ function StoryDisplay({
             e.stopPropagation()
             const rect = e.currentTarget.getBoundingClientRect()
             let finalTranslation = translation
-            
+
             // 如果不是新学单词，尝试查询翻译
             if (!finalTranslation) {
               finalTranslation = await lookupWordTranslation(part.text)
             }
-            
+
             // 计算弹窗位置，确保在视口内
             const x = Math.min(
               Math.max(rect.left + rect.width / 2, 150),
               window.innerWidth - 150
             )
             const y = Math.max(rect.top - 10, 50)
-            
+
             setSelectedWord({
               word: part.text,
               translation: finalTranslation || '暂无翻译',
@@ -995,7 +1007,7 @@ function StoryDisplay({
     try {
       // 构建完整的故事文本（标题 + 内容）
       const fullText = `${story.title}. ${story.content}`
-      
+
       const response = await fetch(
         `/api/tts?text=${encodeURIComponent(fullText)}&lang=en`,
         { method: 'GET' }
@@ -1015,10 +1027,10 @@ function StoryDisplay({
       // 验证并修复音频格式
       const arrayBuffer = await blob.arrayBuffer()
       const uint8Array = new Uint8Array(arrayBuffer)
-      
+
       const isValidMP3 = uint8Array[0] === 0xFF && (uint8Array[1] & 0xE0) === 0xE0 ||
-                         (uint8Array[0] === 0x49 && uint8Array[1] === 0x44 && uint8Array[2] === 0x33)
-      
+        (uint8Array[0] === 0x49 && uint8Array[1] === 0x44 && uint8Array[2] === 0x33)
+
       if (!isValidMP3) {
         let mp3StartIndex = -1
         for (let i = 0; i < Math.min(100, uint8Array.length - 1); i++) {
@@ -1032,7 +1044,7 @@ function StoryDisplay({
           blob = new Blob([trimmedBuffer], { type: 'audio/mpeg' })
         }
       }
-      
+
       let audioBlob = blob
       if (!blob.type || !blob.type.startsWith('audio/')) {
         audioBlob = new Blob([blob], { type: 'audio/mpeg' })
@@ -1040,10 +1052,10 @@ function StoryDisplay({
 
       const url = URL.createObjectURL(audioBlob)
       const audio = new Audio(url)
-      
+
       // 设置播放速度
       audio.playbackRate = playbackRate
-      
+
       audioRef.current = audio
 
       audio.onplay = () => {
@@ -1103,26 +1115,26 @@ function StoryDisplay({
       animate={{ opacity: 1, scale: 1 }}
       className="w-full max-w-4xl mx-auto"
     >
-      <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border-4 border-candy-blue">
-        {/* 头部操作 */}
-        <div className="bg-gradient-to-r from-candy-blue/10 to-candy-green/10 p-4 flex justify-between items-center border-b-2 border-gray-200">
+      <div className="glass-card rounded-[2.5rem] shadow-2xl overflow-hidden border-2 border-white/50 relative">
+        {/* 顶部操作 */}
+        <div className="bg-gradient-to-r from-blue-50/50 to-purple-50/50 p-4 flex justify-between items-center border-b border-white/30 backdrop-blur-sm">
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleReset}
-            className="flex items-center space-x-2 text-sm text-gray-600 hover:text-candy-blue transition-colors font-semibold"
+            className="flex items-center space-x-2 text-sm text-gray-500 hover:text-blue-500 transition-colors font-bold px-3 py-1 rounded-full hover:bg-white/50"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-            <span>创建新故事</span>
+            <span>Create New Story</span>
           </motion.button>
         </div>
 
         {/* 故事内容 */}
-        <div className="p-8 md:p-12 max-h-[85vh] overflow-y-auto">
-          <div className="relative flex items-center justify-center mb-8">
-            <h2 className="text-3xl md:text-4xl font-bold text-center bg-gradient-to-r from-candy-blue to-candy-green bg-clip-text text-transparent">
+        <div className="p-8 md:p-12 max-h-[85vh] overflow-y-auto custom-scrollbar">
+          <div className="relative flex items-center justify-center mb-10">
+            <h2 className="text-4xl md:text-5xl font-black text-center bubble-text tracking-wide text-[#38bdf8]" style={{ textShadow: '2px 2px 0 #fff' }}>
               {story.title}
             </h2>
             {/* 播放速度控制和朗读按钮 - 位于标题右侧 */}
@@ -1163,8 +1175,8 @@ function StoryDisplay({
                   ${isPlaying
                     ? 'bg-candy-green text-white animate-pulse'
                     : isLoading
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-candy-blue text-white hover:bg-candy-green'
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-candy-blue text-white hover:bg-candy-green'
                   }
                 `}
                 title={isPlaying ? '暂停朗读' : '朗读故事'}
@@ -1183,7 +1195,7 @@ function StoryDisplay({
               </motion.button>
             </div>
           </div>
-          
+
           {/* 故事图片 */}
           {(story.imageUrl || story.imageData) && (
             <motion.div
@@ -1211,7 +1223,7 @@ function StoryDisplay({
               </div>
             </motion.div>
           )}
-          
+
           <div className="prose prose-lg max-w-none">
             {story.content.split('\n').map((paragraph, idx) => {
               if (!paragraph.trim()) return null
@@ -1330,17 +1342,17 @@ function QuizModule({ questions, onQuizComplete }: { questions: QuizQuestion[], 
   const score = calculateScore()
 
   return (
-    <div className="mt-12 pt-12 border-t-2 border-gray-200">
+    <div className="mt-12 pt-12 border-t-2 border-dashed border-gray-200">
       <div className="mb-8 text-center">
-        <h3 className="text-2xl font-bold text-gray-800 mb-2">🧠 阅读理解测验</h3>
-        <p className="text-gray-600">测试一下你对故事的理解程度！</p>
+        <h3 className="text-2xl font-bold text-gray-800 mb-2 font-bubblegum">🧠 Story Quiz</h3>
+        <p className="text-gray-500 font-medium">Test how much you understood!</p>
       </div>
 
       <div className="space-y-6">
         {questions.map((q, qIndex) => (
-          <div key={qIndex} className="bg-gray-50 p-6 rounded-2xl border-2 border-gray-200">
-            <p className="text-lg font-semibold text-gray-800 mb-4">
-              <span className="text-candy-blue font-bold mr-2">{qIndex + 1}.</span>
+          <div key={qIndex} className="bg-white/60 p-6 rounded-2xl border-2 border-white shadow-sm">
+            <p className="text-lg font-bold text-gray-800 mb-4 flex items-start gap-3">
+              <span className="bg-blue-100 text-blue-500 rounded-lg w-8 h-8 flex items-center justify-center flex-shrink-0 text-sm">{qIndex + 1}</span>
               {q.question}
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1352,16 +1364,16 @@ function QuizModule({ questions, onQuizComplete }: { questions: QuizQuestion[], 
                   onClick={() => handleOptionSelect(qIndex, optIndex)}
                   disabled={isSubmitted}
                   className={`
-                    w-full text-left px-4 py-3 rounded-xl border-2 transition-all duration-200 font-medium
+                    w-full text-left px-5 py-4 rounded-xl border-2 transition-all duration-200 font-bold text-md
                     ${getOptionStyle(qIndex, optIndex)}
                   `}
                 >
                   <div className="flex items-center">
                     <span className={`
-                      w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs mr-3 flex-shrink-0 font-bold
+                      w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs mr-3 flex-shrink-0
                       ${isSubmitted && questions[qIndex].correctAnswerIndex === optIndex ? 'border-green-500 bg-green-500 text-white' : ''}
                       ${isSubmitted && userAnswers[qIndex] === optIndex && questions[qIndex].correctAnswerIndex !== optIndex ? 'border-red-500 bg-red-500 text-white' : ''}
-                      ${!isSubmitted && userAnswers[qIndex] === optIndex ? 'border-candy-blue bg-candy-blue text-white' : 'border-gray-300 bg-white'}
+                      ${!isSubmitted && userAnswers[qIndex] === optIndex ? 'border-candy-blue bg-candy-blue text-white' : 'border-gray-200 bg-white text-gray-400'}
                     `}>
                       {String.fromCharCode(65 + optIndex)}
                     </span>
@@ -1374,29 +1386,32 @@ function QuizModule({ questions, onQuizComplete }: { questions: QuizQuestion[], 
         ))}
       </div>
 
-      <div className="mt-8 flex justify-center">
+      <div className="mt-10 flex justify-center">
         {!isSubmitted ? (
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleSubmit}
-            className="px-8 py-3 bg-gradient-to-r from-candy-blue to-candy-green text-white font-bold rounded-full text-lg shadow-xl hover:shadow-2xl transition-all"
+            className="kawaii-btn kawaii-btn-green px-10 py-3 text-lg"
           >
-            提交答案
+            Submit Answer ✨
           </motion.button>
         ) : (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="text-center p-6 bg-gradient-to-r from-candy-blue/10 to-candy-green/10 rounded-2xl border-2 border-candy-blue"
+            className="text-center p-8 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-3xl border-2 border-yellow-200 shadow-lg"
           >
-            <p className="text-3xl font-bold text-gray-800 mb-2">
-              得分：{score} / {questions.length}
+            <div className="text-5xl mb-4">
+              {score === questions.length ? '🏆' : score > questions.length / 2 ? '👍' : '📚'}
+            </div>
+            <p className="text-3xl font-black text-gray-800 mb-2 font-bubblegum">
+              Score: <span className="text-candy-blue">{score}</span> / {questions.length}
             </p>
-            <p className="text-candy-blue font-semibold">
-              {score === questions.length ? '🌟 满分！太棒了！' :
-               score > questions.length / 2 ? '👍 很好！继续加油！' :
-               '📚 不错！再读一遍故事会更好！'}
+            <p className="text-gray-600 font-medium">
+              {score === questions.length ? 'Perfect! You are a reading master!' :
+                score > questions.length / 2 ? 'Great job! Keep reading!' :
+                  'Nice try! Read again to improve!'}
             </p>
           </motion.div>
         )}

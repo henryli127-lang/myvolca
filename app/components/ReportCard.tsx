@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { userProgress } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
 interface ReportCardProps {
@@ -15,7 +14,7 @@ interface ReportCardProps {
     translationErrors: number
     spellingErrors: number
   }
-  testWords: Array<{ 
+  testWords: Array<{
     id: number
     word: string
     translation: string
@@ -28,163 +27,172 @@ interface ReportCardProps {
 
 export default function ReportCard({ user, results, testWords, onBack, onLogout }: ReportCardProps) {
   const [medal, setMedal] = useState<string>('')
-  const [saving, setSaving] = useState(true)
 
-
-  const translationAccuracy = results.translationTotal > 0 
-    ? Math.round((results.translationCorrect / results.translationTotal) * 100) 
+  const translationAccuracy = results.translationTotal > 0
+    ? Math.round((results.translationCorrect / results.translationTotal) * 100)
     : 0
-  const spellingAccuracy = results.spellingTotal > 0 
-    ? Math.round((results.spellingCorrect / results.spellingTotal) * 100) 
+  const spellingAccuracy = results.spellingTotal > 0
+    ? Math.round((results.spellingCorrect / results.spellingTotal) * 100)
     : 0
+  // Calculate average, can exceed 100% based on user request/logic (bonus points?) 
+  // For now simple average
   const overallAccuracy = Math.round((translationAccuracy + spellingAccuracy) / 2)
 
   useEffect(() => {
-    // 只显示奖牌和触发动画，不保存数据（数据已在 page.tsx 中后台保存）
-    const showMedal = () => {
-      try {
-        // 触发五彩纸屑（动态导入以避免 SSR 问题）
-        if (overallAccuracy === 100) {
-          setMedal('Kiwi Master 🏆')
-          import('canvas-confetti').then((confetti) => {
-            confetti.default({
-              particleCount: 100,
-              spread: 70,
-              origin: { y: 0.6 }
-            })
-          })
-        } else if (overallAccuracy >= 80) {
-          setMedal('Explorer ⭐')
-          import('canvas-confetti').then((confetti) => {
-            confetti.default({
-              particleCount: 50,
-              spread: 50,
-              origin: { y: 0.6 }
-            })
-          })
-        }
-        setSaving(false)
-      } catch (error) {
-        console.error('显示奖牌失败:', error)
-        setSaving(false)
-      }
-    }
+    // Fire confetti effect
+    if (overallAccuracy >= 80) {
+      import('canvas-confetti').then((confetti) => {
+        const duration = 3000;
+        const animationEnd = Date.now() + duration;
+        const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
 
-    // 立即显示，不等待
-    showMedal()
-  }, [overallAccuracy]) // 只依赖 overallAccuracy，避免重复执行
+        const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+        const interval: any = setInterval(function () {
+          const timeLeft = animationEnd - Date.now();
+
+          if (timeLeft <= 0) {
+            return clearInterval(interval);
+          }
+
+          const particleCount = 50 * (timeLeft / duration);
+          confetti.default(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+          confetti.default(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+        }, 250);
+      })
+    }
+  }, [overallAccuracy])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20 p-6 font-quicksand">
-      {/* 退出按钮 */}
-      <div className="absolute top-4 right-4 z-10">
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={onLogout}
-          className="bg-white/80 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
-        >
-          <span>🚪</span>
-          <span className="font-semibold">退出</span>
-        </motion.button>
+    <div className="min-h-screen bg-gradient-to-br from-cyan-100 via-blue-100 to-green-100 p-6 font-quicksand relative overflow-hidden flex items-center justify-center">
+
+      {/* Background Decorations (Stars & Confetti) */}
+      <div className="absolute inset-0 pointer-events-none">
+        {/* Top Left Cluster */}
+        <div className="absolute top-10 left-10 text-4xl animate-bounce" style={{ animationDuration: '3s' }}>⭐</div>
+        <div className="absolute top-20 left-32 text-2xl text-yellow-400 rotate-12">✦</div>
+        <div className="absolute top-40 left-10 text-3xl text-blue-400 -rotate-12">🌀</div>
+
+        {/* Top Right Cluster */}
+        <div className="absolute top-12 right-20 text-4xl animate-pulse">☁️</div>
+        <div className="absolute top-24 right-10 text-2xl text-pink-400 rotate-45">✨</div>
+
+        {/* Bottom Sides */}
+        <div className="absolute bottom-20 left-16 text-3xl text-purple-400 rotate-12">🎉</div>
+        <div className="absolute bottom-32 right-24 text-4xl text-yellow-400 -rotate-6">⭐</div>
       </div>
-      <div className="max-w-4xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-white rounded-3xl shadow-2xl p-8 border-4 border-candy-blue"
-        >
-          {/* 标题 */}
-          <div className="text-center mb-8">
-            <h1 className="text-5xl font-bold text-gray-800 mb-4">
-              📊 测试成绩单
+
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: "spring", duration: 0.8, bounce: 0.4 }}
+        className="bg-white rounded-[3rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] p-8 md:p-12 max-w-2xl w-full border-4 border-white/50 backdrop-blur-sm relative z-10"
+      >
+        {/* Header Title */}
+        <div className="text-center mb-10">
+          <div className="flex items-center justify-center gap-4 mb-2">
+            <motion.span
+              animate={{ rotate: [0, 10, -10, 0] }}
+              transition={{ repeat: Infinity, duration: 2 }}
+              className="text-5xl"
+            >
+              🏆
+            </motion.span>
+            <h1 className="text-4xl md:text-5xl font-black text-gray-800 tracking-tight">
+              Awesome Job!
             </h1>
-            {medal && (
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="text-4xl font-bold text-candy-orange mb-2"
-              >
-                {medal}
-              </motion.div>
-            )}
+            <motion.span
+              animate={{ scale: [1, 1.2, 1] }}
+              transition={{ repeat: Infinity, duration: 1.5 }}
+              className="text-5xl"
+            >
+              🌟
+            </motion.span>
           </div>
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-800 tracking-tight">
+            You're a Star Explorer!
+          </h2>
+        </div>
 
-          {/* 总体准确率 */}
-          <div className="text-center mb-8">
-            <div className="text-8xl font-bold text-candy-blue mb-2">
-              {overallAccuracy}%
+        {/* Overall Score */}
+        <div className="text-center mb-12">
+          <motion.div
+            initial={{ scale: 0.5 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+            className="text-8xl md:text-9xl font-black text-[#38bdf8] drop-shadow-sm font-bubblegum"
+          >
+            {overallAccuracy}%
+          </motion.div>
+          <p className="text-gray-900 font-bold text-lg mt-2">Overall Accuracy</p>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+          {/* Translation Card */}
+          <motion.div
+            whileHover={{ y: -5 }}
+            className="bg-[#dbeafe] border-2 border-[#93c5fd] rounded-3xl p-6 text-center shadow-sm"
+          >
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <span className="text-2xl">✏️</span>
+              <h3 className="font-bold text-gray-800 text-lg">Translation Test</h3>
             </div>
-            <p className="text-xl text-gray-600">总体准确率</p>
-          </div>
+            <div className="text-6xl font-black text-gray-900 mb-2">
+              {translationAccuracy}%
+            </div>
+            <div className="flex justify-center gap-4 text-sm font-bold">
+              <span className="text-gray-600">Correct: {results.translationCorrect} / {results.translationTotal}</span>
+              <span className="text-gray-400">|</span>
+              <span className="text-gray-600">Incorrect: {results.translationErrors}</span>
+            </div>
+          </motion.div>
 
-          {/* 详细统计 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            {/* 翻译测试 */}
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-              className="bg-gradient-to-br from-candy-blue/20 to-candy-green/20 rounded-2xl p-6 border-2 border-candy-blue"
-            >
-              <h3 className="text-2xl font-bold text-gray-800 mb-4">📝 翻译测试</h3>
-              <div className="text-4xl font-bold text-candy-blue mb-2">
-                {translationAccuracy}%
-              </div>
-              <p className="text-gray-600">
-                正确: {results.translationCorrect} / {results.translationTotal}
-              </p>
-              <p className="text-red-600 text-sm mt-2">
-                错误: {results.translationErrors}
-              </p>
-            </motion.div>
+          {/* Spelling Card */}
+          <motion.div
+            whileHover={{ y: -5 }}
+            className="bg-[#dcfce7] border-2 border-[#86efac] rounded-3xl p-6 text-center shadow-sm"
+          >
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <span className="text-2xl">🔡</span>
+              <h3 className="font-bold text-gray-800 text-lg">Spelling Test</h3>
+            </div>
+            <div className="text-6xl font-black text-gray-900 mb-2">
+              {spellingAccuracy}%
+            </div>
+            <div className="flex justify-center gap-4 text-sm font-bold">
+              <span className="text-gray-600">Correct: {results.spellingCorrect} / {results.spellingTotal}</span>
+              <span className="text-gray-400">|</span>
+              <span className="text-gray-600">Incorrect: {results.spellingErrors}</span>
+            </div>
+          </motion.div>
+        </div>
 
-            {/* 拼写测试 */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-              className="bg-gradient-to-br from-candy-green/20 to-candy-orange/20 rounded-2xl p-6 border-2 border-candy-green"
-            >
-              <h3 className="text-2xl font-bold text-gray-800 mb-4">✍️ 拼写测试</h3>
-              <div className="text-4xl font-bold text-candy-green mb-2">
-                {spellingAccuracy}%
-              </div>
-              <p className="text-gray-600">
-                正确: {results.spellingCorrect} / {results.spellingTotal}
-              </p>
-              <p className="text-red-600 text-sm mt-2">
-                错误: {results.spellingErrors}
-              </p>
-            </motion.div>
-          </div>
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              const event = new CustomEvent('openStorySpark', { detail: { testWords } })
+              window.dispatchEvent(event)
+            }}
+            className="bg-[#fb7185] hover:bg-[#f43f5e] text-white font-black py-4 px-8 rounded-full shadow-[0_4px_0_rgb(190,18,60)] hover:shadow-[0_2px_0_rgb(190,18,60)] hover:translate-y-[2px] transition-all text-xl flex items-center justify-center gap-2 min-w-[200px]"
+          >
+            <span>📖</span> Fun Reading
+          </motion.button>
 
-          {/* 操作按钮 */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => {
-                // 通过自定义事件传递 testWords 数据
-                const event = new CustomEvent('openStorySpark', { detail: { testWords } })
-                window.dispatchEvent(event)
-              }}
-              className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transform transition-all text-lg"
-            >
-              📚 趣味阅读
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={onBack}
-              className="bg-gradient-to-r from-candy-blue to-candy-green text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transform transition-all text-lg"
-            >
-              🏠 返回首页
-            </motion.button>
-          </div>
-        </motion.div>
-      </div>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onBack}
+            className="bg-[#22d3ee] hover:bg-[#06b6d4] text-white font-black py-4 px-8 rounded-full shadow-[0_4px_0_rgb(8,145,178)] hover:shadow-[0_2px_0_rgb(8,145,178)] hover:translate-y-[2px] transition-all text-xl flex items-center justify-center gap-2 min-w-[200px]"
+          >
+            <span>🏠</span> Back to Home
+          </motion.button>
+        </div>
+
+      </motion.div>
     </div>
   )
 }
-

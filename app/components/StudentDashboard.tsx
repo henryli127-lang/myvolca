@@ -49,7 +49,7 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
           const lastLoginDate = new Date(lastLogin)
           const now = new Date()
           const hoursDiff = (now.getTime() - lastLoginDate.getTime()) / (1000 * 60 * 60)
-          
+
           if (hoursDiff < 24) {
             setWelcomeMessage('Keep it up! 🔥')
           } else if (hoursDiff > 72) {
@@ -70,17 +70,17 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
         if (userProfile) {
           const lastLogin = userProfile?.last_login_at
           let newStreakDays = streak
-          
+
           if (lastLogin) {
             const lastLoginDate = new Date(lastLogin)
             const today = new Date()
-            
+
             // 只比较日期部分，忽略时间
             const lastLoginDay = new Date(lastLoginDate.getFullYear(), lastLoginDate.getMonth(), lastLoginDate.getDate())
             const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-            
+
             const daysDiff = Math.floor((todayDay.getTime() - lastLoginDay.getTime()) / (1000 * 60 * 60 * 24))
-            
+
             if (daysDiff === 0) {
               // 今天已经登录过，不更新天数
               newStreakDays = streak
@@ -95,9 +95,9 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
             // 首次登录
             newStreakDays = 1
           }
-          
+
           // 判断是否需要更新数据库
-          const needsUpdate = !lastLogin || 
+          const needsUpdate = !lastLogin ||
             (() => {
               const lastLoginDate = new Date(lastLogin)
               const today = new Date()
@@ -105,11 +105,11 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
               const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
               return lastLoginDay.getTime() !== todayDay.getTime()
             })()
-          
+
           if (needsUpdate) {
             // 乐观更新 UI：立即在界面上显示新的天数，不需要等数据库返回
-            setStreakDays(newStreakDays) 
-            
+            setStreakDays(newStreakDays)
+
             // 后台静默更新数据库，不阻塞 UI
             profiles.updateLoginInfo(user.id, newStreakDays)
               .catch(err => console.error('后台更新登录信息失败:', err))
@@ -126,20 +126,90 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-200 via-purple-200 to-blue-200">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          className="w-16 h-16 border-4 border-candy-blue border-t-transparent rounded-full"
+          className="w-16 h-16 border-4 border-cyan-400 border-t-transparent rounded-full"
         />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-candy-blue/20 via-candy-green/20 to-candy-orange/20 p-6 font-quicksand">
+    <div className="min-h-screen relative overflow-hidden font-quicksand">
+      {/* 渐变背景 */}
+      <div className="absolute inset-0 bg-gradient-to-br from-pink-200 via-purple-200 to-blue-200" />
+
+      {/* 彩色 Blob 装饰 */}
+      <div className="absolute top-0 left-0 w-64 h-64 bg-pink-300/50 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+      <div className="absolute top-1/4 right-0 w-80 h-80 bg-purple-300/40 rounded-full blur-3xl translate-x-1/3" />
+      <div className="absolute bottom-0 left-1/4 w-72 h-72 bg-blue-300/40 rounded-full blur-3xl translate-y-1/2" />
+      <div className="absolute bottom-0 right-0 w-56 h-56 bg-orange-300/50 rounded-full blur-3xl translate-x-1/4 translate-y-1/4" />
+
+      {/* 装饰元素 - 星星 */}
+      <div className="absolute top-20 left-32 text-yellow-400 text-2xl animate-pulse">⭐</div>
+      <div className="absolute top-16 left-48 text-yellow-300 text-lg animate-pulse" style={{ animationDelay: '0.5s' }}>✦</div>
+      <div className="absolute top-28 left-40 text-yellow-400 text-sm animate-pulse" style={{ animationDelay: '0.3s' }}>✦</div>
+      <div className="absolute top-40 right-48 text-yellow-400 text-xl animate-pulse" style={{ animationDelay: '0.7s' }}>⭐</div>
+      <div className="absolute top-32 right-32 text-yellow-300 text-sm animate-pulse" style={{ animationDelay: '0.2s' }}>✦</div>
+      <div className="absolute bottom-48 left-24 text-yellow-400 text-lg animate-pulse" style={{ animationDelay: '0.4s' }}>⭐</div>
+      <div className="absolute bottom-40 right-40 text-yellow-400 text-2xl animate-pulse" style={{ animationDelay: '0.6s' }}>⭐</div>
+      <div className="absolute bottom-56 right-24 text-yellow-300 text-sm animate-pulse" style={{ animationDelay: '0.8s' }}>✦</div>
+      <div className="absolute top-1/2 left-16 text-yellow-400 text-lg animate-pulse" style={{ animationDelay: '0.9s' }}>✦</div>
+
+      {/* 装饰元素 - 可爱云朵 */}
+      <motion.div
+        className="absolute bottom-1/3 left-20 text-4xl"
+        animate={{ y: [0, -5, 0] }}
+        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        ☁️
+      </motion.div>
+      <motion.div
+        className="absolute top-1/3 right-20 text-4xl"
+        animate={{ y: [0, -5, 0] }}
+        transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+      >
+        ☁️
+      </motion.div>
+
+      {/* 装饰元素 - 行星 */}
+      <motion.div
+        className="absolute top-24 right-24 text-4xl"
+        animate={{ rotate: [0, 10, 0, -10, 0] }}
+        transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        🪐
+      </motion.div>
+      <motion.div
+        className="absolute bottom-32 right-32 text-3xl"
+        animate={{ rotate: [0, -10, 0, 10, 0] }}
+        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+      >
+        🪐
+      </motion.div>
+
+      {/* 装饰元素 - 地球 */}
+      <motion.div
+        className="absolute bottom-40 left-24 text-4xl"
+        animate={{ rotate: 360 }}
+        transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
+      >
+        🌍
+      </motion.div>
+
+      {/* 装饰元素 - 火箭 */}
+      <motion.div
+        className="absolute top-1/2 right-28 text-3xl"
+        animate={{ y: [0, -10, 0], rotate: [-15, -15, -15] }}
+        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        🚀
+      </motion.div>
+
       {/* 顶部按钮区域 */}
-      <div className="absolute top-4 right-4 z-10 flex items-center gap-3">
+      <div className="absolute top-4 right-4 z-50 flex items-center gap-3">
         {/* 查看单词明细按钮 */}
         <motion.button
           initial={{ opacity: 0, y: -20 }}
@@ -148,17 +218,16 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setIsHistoryOpen(true)}
-          className="group relative bg-white/80 backdrop-blur-sm text-gray-700 w-12 h-12 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center text-2xl"
+          className="group relative bg-white/90 backdrop-blur-sm text-gray-700 w-12 h-12 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center text-2xl border-2 border-white/50"
           title="查看单词明细"
         >
           <span>📅</span>
-          {/* Tooltip */}
           <span className="absolute right-full mr-3 px-3 py-1.5 bg-gray-900 text-white text-sm font-semibold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
             查看单词明细
             <span className="absolute left-full top-1/2 -translate-y-1/2 border-4 border-transparent border-l-gray-900"></span>
           </span>
         </motion.button>
-        
+
         {/* 我的图书馆按钮 */}
         <motion.button
           initial={{ opacity: 0, y: -20 }}
@@ -167,60 +236,61 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
           onClick={onOpenLibrary}
-          className="group relative bg-white/80 backdrop-blur-sm text-gray-700 w-12 h-12 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center text-2xl"
+          className="group relative bg-white/90 backdrop-blur-sm text-gray-700 w-12 h-12 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center text-2xl border-2 border-white/50"
           title="我的图书馆"
         >
           <span>📚</span>
-          {/* Tooltip */}
           <span className="absolute right-full mr-3 px-3 py-1.5 bg-gray-900 text-white text-sm font-semibold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
             我的图书馆
             <span className="absolute left-full top-1/2 -translate-y-1/2 border-4 border-transparent border-l-gray-900"></span>
           </span>
         </motion.button>
-        
+
         {/* 退出按钮 */}
         <motion.button
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
           onClick={onLogout}
-          className="group relative bg-white/80 backdrop-blur-sm text-gray-700 w-12 h-12 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center text-2xl"
+          className="group relative bg-white/90 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center text-base font-semibold border-2 border-white/50 gap-1"
           title="退出"
         >
           <span>🚪</span>
-          {/* Tooltip */}
-          <span className="absolute right-full mr-3 px-3 py-1.5 bg-gray-900 text-white text-sm font-semibold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
-            退出
-            <span className="absolute left-full top-1/2 -translate-y-1/2 border-4 border-transparent border-l-gray-900"></span>
-          </span>
+          <span>退出</span>
         </motion.button>
       </div>
-      <div className="max-w-4xl mx-auto">
+
+      {/* 主内容区域 */}
+      <div className="relative z-10 max-w-4xl mx-auto pt-16 px-6">
         {/* 欢迎消息 */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-8"
+          className="text-center mb-12"
         >
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-800 mb-2">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-gray-700 mb-2 drop-shadow-sm">
             {welcomeMessage}
           </h1>
         </motion.div>
 
         {/* 统计卡片 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
           {/* 连续登录天数 */}
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.1 }}
-            className="bg-white rounded-3xl shadow-xl p-8 border-4 border-candy-orange"
+            className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl p-8 border border-white/50"
           >
             <div className="text-center">
-              <div className="text-6xl font-bold text-candy-orange mb-2">
-                {streakDays}
-              </div>
-              <div className="text-xl text-gray-700 font-semibold">
-                🔥 连续登录天数
+              {/* 渐变标题 */}
+              <h3 className="text-2xl font-extrabold mb-4 bg-gradient-to-r from-cyan-400 to-green-400 bg-clip-text text-transparent" style={{ fontFamily: 'Comic Sans MS, cursive, sans-serif' }}>
+                Streak
+              </h3>
+              <div className="flex items-center justify-center gap-4">
+                <span className="text-5xl">🔥</span>
+                <span className="text-5xl font-bold text-gray-700">
+                  {streakDays} <span className="text-3xl">Days</span>
+                </span>
               </div>
             </div>
           </motion.div>
@@ -230,14 +300,23 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2 }}
-            className="bg-white rounded-3xl shadow-xl p-8 border-4 border-candy-green"
+            className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl p-8 border border-white/50 relative"
           >
+            {/* 小星星装饰 */}
+            <div className="absolute top-4 right-8 text-yellow-400 text-sm">✦ ✦ ✦</div>
             <div className="text-center">
-              <div className="text-6xl font-bold text-candy-green mb-2">
-                {masteredCount}
-              </div>
-              <div className="text-xl text-gray-700 font-semibold">
-                📚 已掌握单词
+              {/* 渐变标题 */}
+              <h3 className="text-2xl font-extrabold mb-4 bg-gradient-to-r from-cyan-400 via-blue-400 to-orange-400 bg-clip-text text-transparent" style={{ fontFamily: 'Comic Sans MS, cursive, sans-serif' }}>
+                Words Mastered
+              </h3>
+              <div className="flex items-center justify-center gap-4">
+                <div className="relative">
+                  <span className="text-5xl">📖</span>
+                  <span className="absolute -top-1 -right-1 text-yellow-400 text-xs">✦</span>
+                </div>
+                <span className="text-5xl font-bold text-gray-700">
+                  {masteredCount}
+                </span>
               </div>
             </div>
           </motion.div>
@@ -253,25 +332,29 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            animate={{
-              boxShadow: [
-                '0 0 0 0 rgba(84, 160, 255, 0.7)',
-                '0 0 0 10px rgba(84, 160, 255, 0)',
-                '0 0 0 0 rgba(84, 160, 255, 0)',
-              ],
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: 'easeInOut',
-            }}
             onClick={onStartAdventure}
-            className="bg-gradient-to-r from-candy-blue to-candy-green text-white text-2xl font-bold py-6 px-12 rounded-3xl shadow-2xl transform transition-all hover:shadow-3xl"
-            style={{
-              fontFamily: 'Quicksand, sans-serif',
-            }}
+            className="relative group"
           >
-            🚀 Start Adventure
+            {/* 外发光效果 */}
+            <div className="absolute -inset-1 bg-gradient-to-r from-cyan-400 via-blue-400 to-cyan-400 rounded-full blur opacity-60 group-hover:opacity-80 transition-opacity" />
+
+            {/* 主按钮 */}
+            <div
+              className="relative px-12 py-5 rounded-full text-2xl font-bold text-white flex items-center gap-3"
+              style={{
+                background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 25%, #d299c2 50%, #fef9d7 75%, #a8edea 100%)',
+                boxShadow: '0 4px 20px rgba(168, 237, 234, 0.4), inset 0 2px 10px rgba(255,255,255,0.3)',
+                fontFamily: 'Comic Sans MS, cursive, sans-serif',
+              }}
+            >
+              <span className="bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 bg-clip-text text-transparent drop-shadow-sm">
+                Start
+              </span>
+              <span className="text-3xl">🚀</span>
+              <span className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 bg-clip-text text-transparent drop-shadow-sm">
+                Adventure
+              </span>
+            </div>
           </motion.button>
         </motion.div>
       </div>
