@@ -1,7 +1,16 @@
 import vision from "@google-cloud/vision";
 
 // Define the client outside the function to reuse in serverless
-const client = new vision.ImageAnnotatorClient();
+// 优先从环境变量读取凭证（Vercel 部署），否则使用本地默认凭证（开发时）
+function getVisionClient() {
+  const credentialsJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (credentialsJson) {
+    const credentials = JSON.parse(credentialsJson);
+    return new vision.ImageAnnotatorClient({ credentials });
+  }
+  return new vision.ImageAnnotatorClient();
+}
+const client = getVisionClient();
 
 export interface VisualMapItem {
     id: string;
