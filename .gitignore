@@ -37,3 +37,6 @@ next-env.d.ts
 
 # screenshots
 /screenshots
+
+# Google Cloud credentials (never commit)
+visionAPI/*.json

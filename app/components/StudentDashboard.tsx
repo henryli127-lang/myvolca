@@ -12,9 +12,10 @@ interface StudentDashboardProps {
   onStartAdventure: () => void
   onOpenLibrary: () => void
   onLogout: () => void
+  onBackToSelector?: () => void
 }
 
-export default function StudentDashboard({ user, userProfile, onStartAdventure, onOpenLibrary, onLogout }: StudentDashboardProps) {
+export default function StudentDashboard({ user, userProfile, onStartAdventure, onOpenLibrary, onLogout, onBackToSelector }: StudentDashboardProps) {
   const [streakDays, setStreakDays] = useState(0)
   const [masteredCount, setMasteredCount] = useState(0)
   const [welcomeMessage, setWelcomeMessage] = useState('')
@@ -207,6 +208,24 @@ export default function StudentDashboard({ user, userProfile, onStartAdventure, 
       >
         🚀
       </motion.div>
+
+      {/* 返回按钮 - 左上角 */}
+      {onBackToSelector && (
+        <div className="absolute top-4 left-4 z-50">
+          <motion.button
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onBackToSelector}
+            className="group relative bg-white/90 backdrop-blur-sm text-gray-700 px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center text-base font-semibold border-2 border-white/50 gap-1"
+            title="返回选择"
+          >
+            <span>⬅️</span>
+            <span>返回</span>
+          </motion.button>
+        </div>
+      )}
 
       {/* 顶部按钮区域 */}
       <div className="absolute top-4 right-4 z-50 flex items-center gap-3">

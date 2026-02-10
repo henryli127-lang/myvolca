@@ -12,9 +12,11 @@ import ReportCard from './components/ReportCard'
 import StorySpark from './components/StorySpark'
 import Library from './components/Library'
 import ArticleView from './components/ArticleView'
+import AppSelector from './components/AppSelector'
+import MathTutor from './components/MathTutor'
 import type { User } from '@supabase/supabase-js'
 
-type AppStage = 'dashboard' | 'learning' | 'challenge' | 'report' | 'storyspark' | 'transition' | 'library' | 'article'
+type AppStage = 'selector' | 'dashboard' | 'learning' | 'challenge' | 'report' | 'storyspark' | 'transition' | 'library' | 'article' | 'math'
 
 interface TestResults {
   translationCorrect: number
@@ -49,7 +51,7 @@ export default function Home() {
 
   const [showSettings, setShowSettings] = useState(false)
 
-  const [appStage, setAppStage] = useState<AppStage>('dashboard')
+  const [appStage, setAppStage] = useState<AppStage>('selector')
   const [testResults, setTestResults] = useState<TestResults | null>(null)
   const [testWords, setTestWords] = useState<TestWord[]>([])
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null)
@@ -179,7 +181,7 @@ export default function Home() {
         console.log('🔄 page.tsx: SIGNED_OUT 事件，清除状态')
         setUser(null)
         setUserProfile(null)
-        setAppStage('dashboard')
+        setAppStage('selector')
         setLoading(false)
         isFetchingProfile.current = false
       }
@@ -300,14 +302,14 @@ export default function Home() {
                 // 其他情况，回到dashboard
                 else {
                   console.log('阅读进度不符合恢复条件，回到dashboard')
-                  setAppStage('dashboard')
+                  setAppStage('selector')
                 }
               } else if (checkTestProgress(user.id)) {
                 console.log('📋 恢复测试进度')
                 setAppStage('challenge')
               } else {
                 console.log('📋 跳转到 dashboard')
-                setAppStage('dashboard')
+                setAppStage('selector')
               }
             }
           }
@@ -336,7 +338,7 @@ export default function Home() {
                   setProfileError(false)
                   // 设置默认路由
                   if (retryProfile.role === 'child') {
-                    setAppStage('dashboard')
+                    setAppStage('selector')
                   }
                   setLoading(false)
                 } else if (retryError && retryError.code !== 'PGRST116') {
@@ -439,7 +441,7 @@ export default function Home() {
     setUser(null)
     setUserProfile(null)
     setProfileError(false)
-    setAppStage('dashboard')
+    setAppStage('selector')
     setLoading(false)
     isFetchingProfile.current = false
 
@@ -652,6 +654,22 @@ export default function Home() {
     }
   }
 
+  // App Selector handlers
+  const handleSelectVocabulary = () => {
+    setAppStage('dashboard')
+  }
+
+  const handleSelectMath = () => {
+    setAppStage('math')
+  }
+
+  const handleBackToSelector = () => {
+    setAppStage('selector')
+    setTestResults(null)
+    setSelectedArticleId(null)
+    setTestWords([])
+  }
+
   // 保存文章到图书馆
   const handleSaveArticle = async (article: {
     title: string
@@ -782,6 +800,28 @@ export default function Home() {
       </AnimatePresence>
 
       <AnimatePresence mode="wait">
+        {appStage === 'selector' && (
+          <motion.div key="selector" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <AppSelector
+              user={user}
+              userProfile={userProfile}
+              onSelectVocabulary={handleSelectVocabulary}
+              onSelectMath={handleSelectMath}
+              onLogout={() => handleLogout()}
+            />
+          </motion.div>
+        )}
+
+        {appStage === 'math' && (
+          <motion.div key="math" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <MathTutor
+              user={user}
+              userProfile={userProfile}
+              onBack={handleBackToSelector}
+            />
+          </motion.div>
+        )}
+
         {appStage === 'dashboard' && (
           <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <StudentDashboard
@@ -790,6 +830,7 @@ export default function Home() {
               onStartAdventure={handleStartAdventure}
               onOpenLibrary={handleOpenLibrary}
               onLogout={() => handleLogout()}
+              onBackToSelector={handleBackToSelector}
             />
           </motion.div>
         )}
